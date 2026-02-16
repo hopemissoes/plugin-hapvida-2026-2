@@ -1137,6 +1137,15 @@ class Formulario_Hapvida_Admin
             'formulario_hapvida_general'
         );
 
+        // Campo Redirecionar para página de obrigado
+        add_settings_field(
+            'redirect_obrigado',
+            'Redirecionar para Página de Obrigado',
+            array($this, 'redirect_obrigado_callback'),
+            'formulario-hapvida-admin',
+            'formulario_hapvida_general'
+        );
+
     }
 
     /**
@@ -2133,6 +2142,18 @@ class Formulario_Hapvida_Admin
         echo '</div>';
         echo '<p style="margin: 5px 0; font-size: 13px; color: #6c757d;"><strong>Dica:</strong> As cidades aparecerão na mesma ordem que você digitá-las aqui.</p>';
         echo '</div>';
+    }
+
+    public function redirect_obrigado_callback()
+    {
+        $options = get_option($this->option_name);
+        $checked = isset($options['redirect_obrigado']) && $options['redirect_obrigado'] === '1';
+        echo "<label style='display: flex; align-items: center; gap: 8px; cursor: pointer;'>";
+        echo "<input type='hidden' name='{$this->option_name}[redirect_obrigado]' value='0' />";
+        echo "<input type='checkbox' name='{$this->option_name}[redirect_obrigado]' value='1' " . checked($checked, true, false) . " />";
+        echo "Ativar redirecionamento para página de obrigado";
+        echo "</label>";
+        echo "<p class='description'>Se ativado, o lead será redirecionado para a página de obrigado antes de ir ao WhatsApp. Se desativado, o lead vai direto para o WhatsApp do vendedor.</p>";
     }
 
     public function ajax_clear_submission_stats()
@@ -5700,6 +5721,52 @@ class Formulario_Hapvida_Admin
                                 </table>
 
                                 <?php submit_button('💾 Salvar Configurações de Relatórios', 'primary', 'submit', false); ?>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="hapvida-row">
+                    <div class="hapvida-column full-width">
+                        <div class="hapvida-card">
+                            <h2><i class="dashicons dashicons-migrate"></i> Redirecionamento após Envio</h2>
+                            <p class="hapvida-auto-activate-desc" style="margin-bottom: 16px;">
+                                Configure o comportamento do redirecionamento após o envio do formulário.
+                            </p>
+
+                            <?php
+                            $options_redirect = get_option($this->option_name);
+                            $redirect_ativo = isset($options_redirect['redirect_obrigado']) && $options_redirect['redirect_obrigado'] === '1';
+                            ?>
+
+                            <?php if ($redirect_ativo): ?>
+                                <div class="hapvida-alert success">
+                                    <strong>Ativo:</strong> O lead será redirecionado para a página de obrigado antes de ir ao WhatsApp.
+                                </div>
+                            <?php else: ?>
+                                <div class="hapvida-alert warning">
+                                    <strong>Desativado:</strong> O lead será redirecionado direto para o WhatsApp do vendedor.
+                                </div>
+                            <?php endif; ?>
+
+                            <form action="options.php" method="post">
+                                <?php settings_fields('formulario_hapvida_settings'); ?>
+                                <input type="hidden" name="<?php echo $this->option_name; ?>[redirect_obrigado]" value="0" />
+                                <table class="form-table" role="presentation">
+                                    <tr>
+                                        <th scope="row">
+                                            <label for="redirect_obrigado">Página de Obrigado</label>
+                                        </th>
+                                        <td>
+                                            <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                                                <input type="checkbox" id="redirect_obrigado" name="<?php echo $this->option_name; ?>[redirect_obrigado]" value="1" <?php checked($redirect_ativo, true); ?> />
+                                                Redirecionar para página de obrigado antes do WhatsApp
+                                            </label>
+                                            <p class="description">Se ativado, o lead passa pela página de obrigado antes de abrir o WhatsApp. Se desativado, vai direto para o WhatsApp.</p>
+                                        </td>
+                                    </tr>
+                                </table>
+                                <?php submit_button('💾 Salvar Configuração de Redirecionamento', 'primary', 'submit', false); ?>
                             </form>
                         </div>
                     </div>

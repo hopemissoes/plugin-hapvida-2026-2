@@ -5353,21 +5353,31 @@ class Formulario_Hapvida
 
                                         success: function (response) {
                                             if (response.success && response.whatsapp_url) {
-                                                // *** NOVO: Redireciona para página de obrigado em vez de mostrar modal ***
                                                 console.log('✅ Formulário enviado com sucesso, redirecionando...');
 
-                                                // Armazena URL do WhatsApp no sessionStorage
-                                                sessionStorage.setItem('hapvida_whatsapp_url', response.whatsapp_url);
+                                                <?php
+                                                $plugin_options = get_option('formulario_hapvida_settings', array());
+                                                $redirect_obrigado = isset($plugin_options['redirect_obrigado']) && $plugin_options['redirect_obrigado'] === '1';
+                                                ?>
 
-                                                // Armazena informações do vendedor
-                                                if (response.vendor_info) {
-                                                    sessionStorage.setItem('hapvida_vendor_info', JSON.stringify(response.vendor_info));
+                                                var redirectObrigado = <?php echo $redirect_obrigado ? 'true' : 'false'; ?>;
+
+                                                if (redirectObrigado) {
+                                                    // Armazena URL do WhatsApp no sessionStorage
+                                                    sessionStorage.setItem('hapvida_whatsapp_url', response.whatsapp_url);
+
+                                                    // Armazena informações do vendedor
+                                                    if (response.vendor_info) {
+                                                        sessionStorage.setItem('hapvida_vendor_info', JSON.stringify(response.vendor_info));
+                                                    }
+
+                                                    // Redireciona para página de obrigado COM URL do WhatsApp como parâmetro GET
+                                                    var thankYouUrl = 'https://tabelaplanos.com.br/obrigado/?whatsapp=' + encodeURIComponent(response.whatsapp_url);
+                                                    window.location.href = thankYouUrl;
+                                                } else {
+                                                    // Redireciona direto para o WhatsApp do vendedor
+                                                    window.location.href = response.whatsapp_url;
                                                 }
-
-                                                // Redireciona para página de obrigado COM URL do WhatsApp como parâmetro GET
-                                                // Página de produção
-                                                var thankYouUrl = 'https://tabelaplanos.com.br/obrigado/?whatsapp=' + encodeURIComponent(response.whatsapp_url);
-                                                window.location.href = thankYouUrl;
 
                                             } else {
                                                 handleImprovedError(response.message || 'Erro desconhecido');
