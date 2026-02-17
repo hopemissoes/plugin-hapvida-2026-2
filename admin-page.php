@@ -82,10 +82,26 @@ class Formulario_Hapvida_Admin
         add_action('wp_ajax_get_vendors_list_frontend', array($this, 'ajax_get_vendors_list_frontend'));
         add_action('wp_ajax_nopriv_get_vendors_list_frontend', array($this, 'ajax_get_vendors_list_frontend'));
 
+        add_action('wp_ajax_get_delivery_stats', array($this, 'ajax_get_delivery_stats'));
+        add_action('wp_ajax_nopriv_get_delivery_stats', array($this, 'ajax_get_delivery_stats'));
+
         // Diagnóstico de email
         add_action('admin_action_diagnose_email_hapvida', array($this, 'handle_email_diagnostic'));
     }
 
+
+    // AJAX: Retorna stats de delivery tracking (sem login)
+    public function ajax_get_delivery_stats()
+    {
+        global $hapvida_delivery_tracking;
+        if (!$hapvida_delivery_tracking) {
+            wp_send_json_error(array('message' => 'Delivery tracking não disponível'));
+            return;
+        }
+
+        $stats = $hapvida_delivery_tracking->get_stats_summary();
+        wp_send_json_success($stats);
+    }
 
     // NOVA FUNÇÃO: Toggle vendedor status para frontend (sem login)
     public function ajax_toggle_vendor_status_frontend()
@@ -2229,94 +2245,105 @@ class Formulario_Hapvida_Admin
 
     private function render_delivery_tracking_frontend()
     {
-        global $hapvida_delivery_tracking;
-        if (!$hapvida_delivery_tracking) {
-            return;
-        }
-
-        $stats = $hapvida_delivery_tracking->get_stats_summary();
         ?>
         <div class="section-header">
             <h2><i class="fas fa-satellite-dish"></i> Monitoramento de Entregas</h2>
+            <button id="refresh-delivery-stats" class="control-btn secondary small">
+                <i class="fas fa-sync-alt"></i> Atualizar
+            </button>
         </div>
 
         <div class="delivery-stats-grid">
             <div class="delivery-stat-card pending-card">
                 <div class="delivery-stat-icon"><i class="fas fa-clock"></i></div>
-                <div class="delivery-stat-value"><?php echo $stats['pendentes']; ?></div>
+                <div class="delivery-stat-value" id="delivery-pendentes">--</div>
                 <div class="delivery-stat-label">Pendentes</div>
             </div>
             <div class="delivery-stat-card success-card">
                 <div class="delivery-stat-icon"><i class="fas fa-check-circle"></i></div>
-                <div class="delivery-stat-value"><?php echo $stats['entregues']; ?></div>
+                <div class="delivery-stat-value" id="delivery-entregues">--</div>
                 <div class="delivery-stat-label">Entregues</div>
             </div>
             <div class="delivery-stat-card expired-card">
                 <div class="delivery-stat-icon"><i class="fas fa-exclamation-triangle"></i></div>
-                <div class="delivery-stat-value"><?php echo $stats['expirados']; ?></div>
+                <div class="delivery-stat-value" id="delivery-expirados">--</div>
                 <div class="delivery-stat-label">Expirados</div>
             </div>
         </div>
 
-        <?php if (!empty($stats['pendentes_list'])): ?>
-            <div class="delivery-pending-list">
-                <h3>Entregas aguardando confirmação</h3>
-                <table class="delivery-table">
-                    <thead>
-                        <tr>
-                            <th>Vendedor</th>
-                            <th>Grupo</th>
-                            <th>Tempo</th>
-                            <th>Status</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <?php foreach ($stats['pendentes_list'] as $p): ?>
-                            <tr>
-                                <td><?php echo esc_html($p['vendedor']); ?></td>
-                                <td><span class="grupo-badge"><?php echo esc_html(strtoupper($p['grupo'])); ?></span></td>
-                                <td><?php echo $p['minutos']; ?> min</td>
-                                <td>
-                                    <?php if ($p['minutos'] >= 120): ?>
-                                        <span class="status-badge status-danger">EXPIRADO</span>
-                                    <?php elseif ($p['minutos'] >= 90): ?>
-                                        <span class="status-badge status-warning">ALERTA</span>
-                                    <?php else: ?>
-                                        <span class="status-badge status-ok">Aguardando</span>
-                                    <?php endif; ?>
-                                </td>
-                            </tr>
-                        <?php endforeach; ?>
-                    </tbody>
-                </table>
-            </div>
-        <?php endif; ?>
+        <div id="delivery-pending-list-container"></div>
+        <div id="delivery-deactivation-log-container"></div>
 
-        <?php if (!empty($stats['inativacoes_recentes'])): ?>
-            <div class="delivery-deactivation-log">
-                <h3>Inativacoes automaticas recentes</h3>
-                <table class="delivery-table">
-                    <thead>
-                        <tr>
-                            <th>Vendedor</th>
-                            <th>Grupo</th>
-                            <th>Inativado em</th>
-                            <th>Motivo</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <?php foreach ($stats['inativacoes_recentes'] as $log): ?>
-                            <tr>
-                                <td><?php echo esc_html($log['vendedor_nome']); ?></td>
-                                <td><span class="grupo-badge"><?php echo esc_html(strtoupper($log['grupo'])); ?></span></td>
-                                <td><?php echo esc_html($log['inativado_em']); ?></td>
-                                <td><?php echo esc_html($log['motivo']); ?></td>
-                            </tr>
-                        <?php endforeach; ?>
-                    </tbody>
-                </table>
-            </div>
-        <?php endif; ?>
+        <script>
+        (function() {
+            function loadDeliveryStats() {
+                var btn = document.getElementById('refresh-delivery-stats');
+                if (btn) btn.classList.add('spinning');
+
+                var formData = new FormData();
+                formData.append('action', 'get_delivery_stats');
+
+                fetch('<?php echo admin_url("admin-ajax.php"); ?>', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(function(r) { return r.json(); })
+                .then(function(res) {
+                    if (btn) btn.classList.remove('spinning');
+                    if (!res.success) return;
+                    var d = res.data;
+
+                    document.getElementById('delivery-pendentes').textContent = d.pendentes;
+                    document.getElementById('delivery-entregues').textContent = d.entregues;
+                    document.getElementById('delivery-expirados').textContent = d.expirados;
+
+                    // Renderiza lista de pendentes
+                    var pendingHtml = '';
+                    if (d.pendentes_list && d.pendentes_list.length > 0) {
+                        pendingHtml = '<div class="delivery-pending-list"><h3>Entregas aguardando confirmacao</h3>';
+                        pendingHtml += '<table class="delivery-table"><thead><tr><th>Vendedor</th><th>Grupo</th><th>Tempo</th><th>Status</th></tr></thead><tbody>';
+                        d.pendentes_list.forEach(function(p) {
+                            var statusClass = p.minutos >= 120 ? 'status-danger' : (p.minutos >= 90 ? 'status-warning' : 'status-ok');
+                            var statusText = p.minutos >= 120 ? 'EXPIRADO' : (p.minutos >= 90 ? 'ALERTA' : 'Aguardando');
+                            pendingHtml += '<tr><td>' + p.vendedor + '</td>';
+                            pendingHtml += '<td><span class="grupo-badge">' + p.grupo.toUpperCase() + '</span></td>';
+                            pendingHtml += '<td>' + p.minutos + ' min</td>';
+                            pendingHtml += '<td><span class="status-badge ' + statusClass + '">' + statusText + '</span></td></tr>';
+                        });
+                        pendingHtml += '</tbody></table></div>';
+                    }
+                    document.getElementById('delivery-pending-list-container').innerHTML = pendingHtml;
+
+                    // Renderiza log de inativacoes
+                    var logHtml = '';
+                    if (d.inativacoes_recentes && d.inativacoes_recentes.length > 0) {
+                        logHtml = '<div class="delivery-deactivation-log"><h3>Inativacoes automaticas recentes</h3>';
+                        logHtml += '<table class="delivery-table"><thead><tr><th>Vendedor</th><th>Grupo</th><th>Inativado em</th><th>Motivo</th></tr></thead><tbody>';
+                        d.inativacoes_recentes.forEach(function(log) {
+                            logHtml += '<tr><td>' + log.vendedor_nome + '</td>';
+                            logHtml += '<td><span class="grupo-badge">' + log.grupo.toUpperCase() + '</span></td>';
+                            logHtml += '<td>' + log.inativado_em + '</td>';
+                            logHtml += '<td>' + log.motivo + '</td></tr>';
+                        });
+                        logHtml += '</tbody></table></div>';
+                    }
+                    document.getElementById('delivery-deactivation-log-container').innerHTML = logHtml;
+                })
+                .catch(function() {
+                    if (btn) btn.classList.remove('spinning');
+                });
+            }
+
+            // Carrega ao abrir e atualiza a cada 30 segundos
+            loadDeliveryStats();
+            setInterval(loadDeliveryStats, 30000);
+
+            var refreshBtn = document.getElementById('refresh-delivery-stats');
+            if (refreshBtn) {
+                refreshBtn.addEventListener('click', loadDeliveryStats);
+            }
+        })();
+        </script>
 
         <style>
             .delivery-stats-grid {
