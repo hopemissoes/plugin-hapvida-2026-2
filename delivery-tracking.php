@@ -98,12 +98,11 @@ class Hapvida_Delivery_Tracking
         ));
 
         // Endpoint de debug - mostra últimos webhooks recebidos
+        // Acesso: ?key=hapvida_debug_2026
         register_rest_route('formulario-hapvida/v1', '/webhook-debug', array(
             'methods' => 'GET',
             'callback' => array($this, 'get_webhook_debug_log'),
-            'permission_callback' => function () {
-                return current_user_can('manage_options');
-            }
+            'permission_callback' => '__return_true'
         ));
     }
 
@@ -651,6 +650,11 @@ class Hapvida_Delivery_Tracking
      */
     public function get_webhook_debug_log($request)
     {
+        $key = $request->get_param('key');
+        if ($key !== 'hapvida_debug_2026') {
+            return new WP_REST_Response(array('error' => 'Chave invalida. Use ?key=hapvida_debug_2026'), 403);
+        }
+
         $log = get_option('hapvida_webhook_debug_log', array());
 
         return new WP_REST_Response(array(
