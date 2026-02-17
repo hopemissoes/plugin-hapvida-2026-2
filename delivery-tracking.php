@@ -96,6 +96,15 @@ class Hapvida_Delivery_Tracking
                 return current_user_can('manage_options');
             }
         ));
+
+        // Endpoint de debug - mostra últimos webhooks recebidos
+        register_rest_route('formulario-hapvida/v1', '/webhook-debug', array(
+            'methods' => 'GET',
+            'callback' => array($this, 'get_webhook_debug_log'),
+            'permission_callback' => function () {
+                return current_user_can('manage_options');
+            }
+        ));
     }
 
     // =========================================================================
@@ -177,6 +186,24 @@ class Hapvida_Delivery_Tracking
         if (empty($body)) {
             $body = $request->get_body_params();
         }
+
+        // Salva log de debug (últimos 20 webhooks recebidos)
+        $debug_log = get_option('hapvida_webhook_debug_log', array());
+        $debug_log[] = array(
+            'timestamp' => current_time('mysql'),
+            'route' => $request->get_route(),
+            'method' => $request->get_method(),
+            'body' => $body,
+            'raw_body' => substr($request->get_body(), 0, 2000),
+            'headers' => array(
+                'content-type' => $request->get_header('content_type'),
+                'user-agent' => $request->get_header('user_agent')
+            )
+        );
+        if (count($debug_log) > 20) {
+            $debug_log = array_slice($debug_log, -20);
+        }
+        update_option('hapvida_webhook_debug_log', $debug_log);
 
         if (empty($body)) {
             return new WP_REST_Response(array(
@@ -617,6 +644,23 @@ class Hapvida_Delivery_Tracking
     public function clear_pending_deliveries()
     {
         delete_option(self::OPTION_PENDING);
+    }
+
+    /**
+     * Retorna log de debug dos webhooks recebidos
+     */
+    public function get_webhook_debug_log($request)
+    {
+        $log = get_option('hapvida_webhook_debug_log', array());
+
+        return new WP_REST_Response(array(
+            'success' => true,
+            'total_recebidos' => count($log),
+            'webhooks' => array_reverse($log),
+            'mensagem' => count($log) === 0
+                ? 'Nenhum webhook recebido ainda. Verifique se a URL e o evento estao configurados corretamente na Evolution API.'
+                : 'Ultimos ' . count($log) . ' webhooks recebidos (do mais recente ao mais antigo).'
+        ), 200);
     }
 }
 
