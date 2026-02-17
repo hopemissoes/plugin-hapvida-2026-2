@@ -80,6 +80,14 @@ class Hapvida_Delivery_Tracking
             'permission_callback' => '__return_true'
         ));
 
+        // Rota com evento no path (quando "Webhook by Events" está ativado na Evolution API)
+        // A Evolution API envia para: /evolution-webhook/MESSAGES_UPDATE
+        register_rest_route('formulario-hapvida/v1', '/evolution-webhook/(?P<event>[a-zA-Z0-9_-]+)', array(
+            'methods' => 'POST',
+            'callback' => array($this, 'handle_evolution_webhook'),
+            'permission_callback' => '__return_true'
+        ));
+
         // Endpoint para verificar status (debug/admin)
         register_rest_route('formulario-hapvida/v1', '/delivery-status', array(
             'methods' => 'GET',
