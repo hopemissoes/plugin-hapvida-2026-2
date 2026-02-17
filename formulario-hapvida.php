@@ -5390,6 +5390,11 @@ function get_formulario_hapvida_instance()
     return $instance;
 }
 
+// Inicializa a instância principal do formulário
+if (!isset($GLOBALS['formulario_hapvida'])) {
+    get_formulario_hapvida_instance();
+}
+
 // Inclui o sistema de limpeza automática apenas uma vez
 $cleanup_file = plugin_dir_path(__FILE__) . 'webhook-cleanup.php';
 if (file_exists($cleanup_file) && !class_exists('Formulario_Hapvida_Webhook_Cleanup')) {
