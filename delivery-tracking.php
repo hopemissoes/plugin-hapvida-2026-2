@@ -221,18 +221,33 @@ class Hapvida_Delivery_Tracking
         // Formato Evolution API (messages.update)
         if (isset($body['event']) && $body['event'] === 'messages.update') {
             $data = isset($body['data']) ? $body['data'] : array();
-            $key = isset($data['key']) ? $data['key'] : array();
-            $update = isset($data['update']) ? $data['update'] : array();
 
-            if (isset($key['remoteJid'])) {
-                // Remove @s.whatsapp.net e extrai apenas o número
-                $phone = preg_replace('/@.*$/', '', $key['remoteJid']);
+            // Formato real da Evolution v2: data.remoteJid e data.status (texto)
+            if (isset($data['remoteJid'])) {
+                $phone = preg_replace('/@.*$/', '', $data['remoteJid']);
+                // Remove sufixos de grupo como ":21" ou ":16"
+                $phone = preg_replace('/:\d+$/', '', $phone);
             }
 
-            // Status numérico da Evolution API
-            $status_code = isset($update['status']) ? intval($update['status']) : 0;
-            if ($status_code >= 3) { // 3 = DELIVERY_ACK, 4 = READ
-                $status = 'delivered';
+            // Formato antigo: data.key.remoteJid (fallback)
+            if (!$phone && isset($data['key']['remoteJid'])) {
+                $phone = preg_replace('/@.*$/', '', $data['key']['remoteJid']);
+            }
+
+            // Status como texto (DELIVERY_ACK, READ, SERVER_ACK, etc.)
+            if (isset($data['status'])) {
+                $raw_evo_status = strtoupper($data['status']);
+                if (in_array($raw_evo_status, array('DELIVERY_ACK', 'READ', 'PLAYED'))) {
+                    $status = 'delivered';
+                }
+            }
+
+            // Fallback: status numérico (formato antigo)
+            if (!$status && isset($data['update']['status'])) {
+                $status_code = intval($data['update']['status']);
+                if ($status_code >= 3) { // 3 = DELIVERY_ACK, 4 = READ
+                    $status = 'delivered';
+                }
             }
         }
 
