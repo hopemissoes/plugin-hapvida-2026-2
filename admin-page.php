@@ -1552,6 +1552,11 @@ class Formulario_Hapvida_Admin
                 </div>
             </div>
 
+            <!-- SEÇÃO: MONITORAMENTO DE ENTREGAS -->
+            <div class="dashboard-section delivery-tracking-section">
+                <?php $this->render_delivery_tracking_frontend(); ?>
+            </div>
+
             <!-- ⭐ NOVA SEÇÃO: GERENCIAMENTO DE VENDEDORES -->
             <div class="dashboard-section vendors-management-section">
                 <?php $this->render_vendors_management_frontend(); ?>
@@ -2220,6 +2225,184 @@ class Formulario_Hapvida_Admin
         $this->render_frontend_dashboard_scripts();
 
         return ob_get_clean();
+    }
+
+    private function render_delivery_tracking_frontend()
+    {
+        global $hapvida_delivery_tracking;
+        if (!$hapvida_delivery_tracking) {
+            return;
+        }
+
+        $stats = $hapvida_delivery_tracking->get_stats_summary();
+        ?>
+        <div class="section-header">
+            <h2><i class="fas fa-satellite-dish"></i> Monitoramento de Entregas</h2>
+        </div>
+
+        <div class="delivery-stats-grid">
+            <div class="delivery-stat-card pending-card">
+                <div class="delivery-stat-icon"><i class="fas fa-clock"></i></div>
+                <div class="delivery-stat-value"><?php echo $stats['pendentes']; ?></div>
+                <div class="delivery-stat-label">Pendentes</div>
+            </div>
+            <div class="delivery-stat-card success-card">
+                <div class="delivery-stat-icon"><i class="fas fa-check-circle"></i></div>
+                <div class="delivery-stat-value"><?php echo $stats['entregues']; ?></div>
+                <div class="delivery-stat-label">Entregues</div>
+            </div>
+            <div class="delivery-stat-card expired-card">
+                <div class="delivery-stat-icon"><i class="fas fa-exclamation-triangle"></i></div>
+                <div class="delivery-stat-value"><?php echo $stats['expirados']; ?></div>
+                <div class="delivery-stat-label">Expirados</div>
+            </div>
+        </div>
+
+        <?php if (!empty($stats['pendentes_list'])): ?>
+            <div class="delivery-pending-list">
+                <h3>Entregas aguardando confirmação</h3>
+                <table class="delivery-table">
+                    <thead>
+                        <tr>
+                            <th>Vendedor</th>
+                            <th>Grupo</th>
+                            <th>Tempo</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($stats['pendentes_list'] as $p): ?>
+                            <tr>
+                                <td><?php echo esc_html($p['vendedor']); ?></td>
+                                <td><span class="grupo-badge"><?php echo esc_html(strtoupper($p['grupo'])); ?></span></td>
+                                <td><?php echo $p['minutos']; ?> min</td>
+                                <td>
+                                    <?php if ($p['minutos'] >= 120): ?>
+                                        <span class="status-badge status-danger">EXPIRADO</span>
+                                    <?php elseif ($p['minutos'] >= 90): ?>
+                                        <span class="status-badge status-warning">ALERTA</span>
+                                    <?php else: ?>
+                                        <span class="status-badge status-ok">Aguardando</span>
+                                    <?php endif; ?>
+                                </td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+        <?php endif; ?>
+
+        <?php if (!empty($stats['inativacoes_recentes'])): ?>
+            <div class="delivery-deactivation-log">
+                <h3>Inativacoes automaticas recentes</h3>
+                <table class="delivery-table">
+                    <thead>
+                        <tr>
+                            <th>Vendedor</th>
+                            <th>Grupo</th>
+                            <th>Inativado em</th>
+                            <th>Motivo</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($stats['inativacoes_recentes'] as $log): ?>
+                            <tr>
+                                <td><?php echo esc_html($log['vendedor_nome']); ?></td>
+                                <td><span class="grupo-badge"><?php echo esc_html(strtoupper($log['grupo'])); ?></span></td>
+                                <td><?php echo esc_html($log['inativado_em']); ?></td>
+                                <td><?php echo esc_html($log['motivo']); ?></td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+        <?php endif; ?>
+
+        <style>
+            .delivery-stats-grid {
+                display: grid;
+                grid-template-columns: repeat(3, 1fr);
+                gap: 15px;
+                margin-bottom: 25px;
+            }
+            .delivery-stat-card {
+                text-align: center;
+                padding: 20px 15px;
+                border-radius: 12px;
+                background: #f8f9fa;
+                border: 1px solid #e2e8f0;
+            }
+            .delivery-stat-card .delivery-stat-icon {
+                font-size: 24px;
+                margin-bottom: 8px;
+            }
+            .delivery-stat-card .delivery-stat-value {
+                font-size: 32px;
+                font-weight: 700;
+                line-height: 1.2;
+            }
+            .delivery-stat-card .delivery-stat-label {
+                font-size: 13px;
+                color: #64748b;
+                margin-top: 4px;
+            }
+            .delivery-stat-card.pending-card .delivery-stat-icon,
+            .delivery-stat-card.pending-card .delivery-stat-value { color: #eab308; }
+            .delivery-stat-card.success-card .delivery-stat-icon,
+            .delivery-stat-card.success-card .delivery-stat-value { color: #22c55e; }
+            .delivery-stat-card.expired-card .delivery-stat-icon,
+            .delivery-stat-card.expired-card .delivery-stat-value { color: #ef4444; }
+
+            .delivery-table {
+                width: 100%;
+                border-collapse: collapse;
+                margin-top: 10px;
+                font-size: 14px;
+            }
+            .delivery-table th {
+                background: #f1f5f9;
+                padding: 10px 12px;
+                text-align: left;
+                font-weight: 600;
+                color: #475569;
+                border-bottom: 2px solid #e2e8f0;
+            }
+            .delivery-table td {
+                padding: 10px 12px;
+                border-bottom: 1px solid #f1f5f9;
+            }
+            .grupo-badge {
+                background: #0054B8;
+                color: white;
+                padding: 2px 8px;
+                border-radius: 4px;
+                font-size: 11px;
+                font-weight: 600;
+            }
+            .status-badge {
+                padding: 3px 10px;
+                border-radius: 12px;
+                font-size: 12px;
+                font-weight: 600;
+            }
+            .status-ok { background: #dcfce7; color: #166534; }
+            .status-warning { background: #fef9c3; color: #854d0e; }
+            .status-danger { background: #fef2f2; color: #991b1b; }
+
+            .delivery-pending-list h3,
+            .delivery-deactivation-log h3 {
+                font-size: 16px;
+                color: #334155;
+                margin: 20px 0 10px 0;
+            }
+
+            @media (max-width: 600px) {
+                .delivery-stats-grid { grid-template-columns: 1fr; }
+                .delivery-table { font-size: 12px; }
+                .delivery-table th, .delivery-table td { padding: 8px 6px; }
+            }
+        </style>
+        <?php
     }
 
     private function render_vendors_management_frontend()

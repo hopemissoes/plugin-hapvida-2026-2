@@ -552,6 +552,50 @@ class Hapvida_Delivery_Tracking
     }
 
     /**
+     * Retorna resumo das entregas para exibição no dashboard/shortcode
+     */
+    public function get_stats_summary()
+    {
+        $pending = get_option(self::OPTION_PENDING, array());
+        $log = get_option(self::OPTION_DEACTIVATION_LOG, array());
+        $now = time();
+
+        $stats = array(
+            'pendentes' => 0,
+            'entregues' => 0,
+            'expirados' => 0,
+            'pendentes_list' => array(),
+            'inativacoes_recentes' => array()
+        );
+
+        foreach ($pending as $delivery) {
+            switch ($delivery['status']) {
+                case 'pendente':
+                    $stats['pendentes']++;
+                    $elapsed_min = round(($now - $delivery['enviado_timestamp']) / 60);
+                    $stats['pendentes_list'][] = array(
+                        'vendedor' => $delivery['vendedor_nome'],
+                        'grupo' => $delivery['grupo'],
+                        'minutos' => $elapsed_min,
+                        'lead_id' => $delivery['lead_id']
+                    );
+                    break;
+                case 'entregue':
+                    $stats['entregues']++;
+                    break;
+                case 'expirado':
+                    $stats['expirados']++;
+                    break;
+            }
+        }
+
+        // Últimas 5 inativações
+        $stats['inativacoes_recentes'] = array_slice(array_reverse($log), 0, 5);
+
+        return $stats;
+    }
+
+    /**
      * Limpa o log de inativações
      */
     public function clear_deactivation_log()
