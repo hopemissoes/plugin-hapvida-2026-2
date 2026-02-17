@@ -102,8 +102,6 @@ class Formulario_Hapvida
 
         add_action('admin_init', array($this, 'handle_admin_debug_actions'));
 
-        add_action('wp_ajax_delete_expired_leads', array($this, 'ajax_delete_expired_leads'));
-
         add_action('hapvida_send_webhook_background', array($this, 'process_webhook_background'), 10, 2);
 
         add_shortcode('hapvida_dashboard', array($this, 'render_dashboard_shortcode'));
@@ -304,25 +302,6 @@ class Formulario_Hapvida
             // Prepara dados do webhook
             $webhook_data = $this->prepare_webhook_data($form_data, $vendedor);
 
-            // Salva lead no tracking
-            global $formulario_hapvida_lead_tracking;
-            if ($formulario_hapvida_lead_tracking) {
-                $lead_id = $formulario_hapvida_lead_tracking->create_lead(
-                    $form_data,
-                    $vendedor,
-                    $this->get_dynamic_timeout()
-                );
-
-                if ($lead_id) {
-                    $this->log("✅ Lead salvo no tracking: {$lead_id}");
-                    // Adiciona informações de tracking aos dados
-                    $webhook_data['lead_tracking'] = array(
-                        'lead_id' => $lead_id,
-                        'tracking_enabled' => true
-                    );
-                }
-            }
-
             // Em vez de enviar diretamente, enfileira
             $this->save_webhook_entry($webhook_data, 'pending', 'Aguardando processamento');
             return true; // Sempre retorna true pois foi enfileirado
@@ -415,53 +394,6 @@ class Formulario_Hapvida
         $this->log("ðŸ• Data/Hora atual (PHP): " . date('d/m/Y H:i:s'));
     }
 
-    public function ajax_delete_expired_leads()
-    {
-        // Redireciona para a função da classe admin
-        global $formulario_hapvida_admin;
-        if ($formulario_hapvida_admin && method_exists($formulario_hapvida_admin, 'ajax_delete_expired_leads')) {
-            $formulario_hapvida_admin->ajax_delete_expired_leads();
-        } else {
-            wp_send_json_error('Função de administração não disponível');
-        }
-    }
-
-    public function ajax_force_redistribute_with_debug()
-    {
-        if (!wp_verify_nonce($_POST['security'], 'force_redistribute_debug_nonce')) {
-            wp_die('Nonce verification failed');
-        }
-
-        if (!current_user_can('manage_options')) {
-            wp_die('Insufficient permissions');
-        }
-
-        $lead_id = sanitize_text_field($_POST['lead_id']);
-
-        // Usa instância do lead tracking se disponível
-        global $formulario_hapvida_lead_tracking;
-        if ($formulario_hapvida_lead_tracking) {
-            $result = $formulario_hapvida_lead_tracking->force_redistribute_lead($lead_id);
-
-            if ($result) {
-                $debug_info = "✅ Redistribuição executada com sucesso para o lead {$lead_id}";
-            } else {
-                $debug_info = "âŒ Falha na redistribuição do lead {$lead_id}";
-            }
-        } else {
-            $debug_info = "âŒ Sistema de lead tracking não está disponível";
-            $result = false;
-        }
-
-        wp_send_json(array(
-            'success' => $result,
-            'data' => array(
-                'debug_info' => $debug_info,
-                'lead_id' => $lead_id,
-                'timestamp' => current_time('d/m/Y H:i:s')
-            )
-        ));
-    }
 
 
 
@@ -713,17 +645,9 @@ class Formulario_Hapvida
 
     public function is_horario_comercial()
     {
-        // Usa a verificação do lead tracking (que funciona corretamente)
-        global $formulario_hapvida_lead_tracking;
-        if ($formulario_hapvida_lead_tracking && method_exists($formulario_hapvida_lead_tracking, 'is_horario_comercial')) {
-            $result = $formulario_hapvida_lead_tracking->is_horario_comercial();
-            $this->log("ðŸ• Horário comercial (via lead tracking): " . ($result ? 'DENTRO' : 'FORA'));
-            return $result;
-        }
-
-        // Fallback
-        $this->log("âš ï¸ Lead tracking indisponível, usando fallback");
-        return false;
+        $current_hour = intval(current_time('H'));
+        $is_business = ($current_hour >= 8 && $current_hour < 18);
+        return $is_business;
     }
 
     public function save_timeout_settings()
@@ -1026,22 +950,6 @@ class Formulario_Hapvida
                     $webhook_success = true;
                     $this->log("✅ Webhook enviado de forma assíncrona");
 
-                    // Se está em horário comercial e redistribuição está ativa, salva no tracking
-                    if ($enable_redistributions && $is_business_hours) {
-                        global $formulario_hapvida_lead_tracking;
-                        if ($formulario_hapvida_lead_tracking && method_exists($formulario_hapvida_lead_tracking, 'create_lead')) {
-                            try {
-                                $lead_id = $formulario_hapvida_lead_tracking->create_lead(
-                                    $form_data,
-                                    $vendedor,
-                                    $this->get_dynamic_timeout()
-                                );
-                                $this->log("✅ Lead salvo no sistema de tracking: {$lead_id}");
-                            } catch (Exception $e) {
-                                $this->log("âš ï¸ Erro ao salvar no tracking: " . $e->getMessage());
-                            }
-                        }
-                    }
                 } else {
                     $this->log("âš ï¸ URL do webhook não configurada para o grupo {$grupo}");
                 }
@@ -1624,12 +1532,6 @@ class Formulario_Hapvida
             // Processa webhooks com falha
             $this->process_failed_webhooks();
 
-            // *** NOVO: Processa também leads expirados se o sistema estiver ativo ***
-            global $formulario_hapvida_lead_tracking;
-            if ($formulario_hapvida_lead_tracking && method_exists($formulario_hapvida_lead_tracking, 'process_expired_leads')) {
-                $this->log("ðŸ”„ Processando leads expirados via cron externo...");
-                $formulario_hapvida_lead_tracking->process_expired_leads();
-            }
 
             $execution_time = round((microtime(true) - $start_time) * 1000, 2);
             $this->log("✅ Cron externo concluído em {$execution_time}ms");
@@ -1782,12 +1684,6 @@ class Formulario_Hapvida
 
         if (isset($_GET['verify_webhook_config']) && current_user_can('manage_options')) {
             $this->verify_webhook_configuration();
-        }
-
-        // Debug do sistema de confirmação
-        global $formulario_hapvida_lead_tracking;
-        if (isset($_GET['debug_confirmation_system']) && current_user_can('manage_options') && $formulario_hapvida_lead_tracking) {
-            $formulario_hapvida_lead_tracking->debug_confirmation_system();
         }
     }
 
@@ -3235,39 +3131,9 @@ class Formulario_Hapvida
             return $result;
         }
     }
-
-
     private function get_vendor_priority($vendedor_nome, $grupo)
     {
-        global $formulario_hapvida_lead_tracking;
-
-        if (!$formulario_hapvida_lead_tracking) {
-            return 'unknown';
-        }
-
-        try {
-            // Busca estatísticas do vendedor para determinar prioridade
-            $vendor_stats = $formulario_hapvida_lead_tracking->get_vendor_priority_info($vendedor_nome, $grupo);
-
-            if ($vendor_stats) {
-                $confirmation_rate = $vendor_stats['confirmation_rate'] ?? 0;
-
-                if ($confirmation_rate >= 80) {
-                    return 'high';
-                } elseif ($confirmation_rate >= 60) {
-                    return 'medium';
-                } elseif ($confirmation_rate >= 40) {
-                    return 'low';
-                } else {
-                    return 'very_low';
-                }
-            }
-
-            return 'unknown';
-        } catch (Exception $e) {
-            $this->log("Erro ao obter prioridade do vendedor: " . $e->getMessage());
-            return 'unknown';
-        }
+        return 'unknown';
     }
 
     private function retry_webhook_with_url($webhook_data, $webhook_url, $webhook_type)
@@ -5471,15 +5337,8 @@ class Formulario_Hapvida
     {
         $options = get_option('formulario_hapvida_settings');
 
-        // Verifica horário comercial via lead tracking se disponível
-        global $formulario_hapvida_lead_tracking;
-        if ($formulario_hapvida_lead_tracking && method_exists($formulario_hapvida_lead_tracking, 'is_horario_comercial')) {
-            $is_business_hours = $formulario_hapvida_lead_tracking->is_horario_comercial();
-        } else {
-            // Fallback simples - considera horário comercial das 8h Ã s 18h
-            $current_hour = intval(current_time('H'));
-            $is_business_hours = ($current_hour >= 8 && $current_hour < 18);
-        }
+        $current_hour = intval(current_time('H'));
+        $is_business_hours = ($current_hour >= 8 && $current_hour < 18);
 
         if ($is_business_hours) {
             return isset($options['redistribution_timeout_weekdays']) ?
