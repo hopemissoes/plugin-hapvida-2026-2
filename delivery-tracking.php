@@ -671,11 +671,18 @@ class Hapvida_Delivery_Tracking
         }
 
         $log = get_option('hapvida_webhook_debug_log', array());
+        $pending = get_option(self::OPTION_PENDING, array());
+        $stats = $this->get_stats_summary();
 
         return new WP_REST_Response(array(
             'success' => true,
             'total_recebidos' => count($log),
             'webhooks' => array_reverse($log),
+            'delivery_tracking' => array(
+                'total_registros' => count($pending),
+                'stats' => $stats,
+                'registros' => array_slice(array_reverse($pending), 0, 10)
+            ),
             'mensagem' => count($log) === 0
                 ? 'Nenhum webhook recebido ainda. Verifique se a URL e o evento estao configurados corretamente na Evolution API.'
                 : 'Ultimos ' . count($log) . ' webhooks recebidos (do mais recente ao mais antigo).'
