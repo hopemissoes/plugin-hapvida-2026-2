@@ -28,9 +28,9 @@ require_once plugin_dir_path(__FILE__) . 'admin-page.php';
 // Carrega a página de relatórios (shortcode [hapvida_reports])
 require_once plugin_dir_path(__FILE__) . 'reports-page.php';
 
-// *** NOVO: Carrega o sistema de tracking de leads COM PROTEÇÃO ***
-if (!class_exists('Formulario_Hapvida_Lead_Tracking')) {
-    require_once plugin_dir_path(__FILE__) . 'lead-tracking.php';
+// Sistema de rastreamento de entregas via Evolution API
+if (!class_exists('Hapvida_Delivery_Tracking')) {
+    require_once plugin_dir_path(__FILE__) . 'delivery-tracking.php';
 }
 
 // *** NOVO: Carrega o sistema de integração com API LeadP3 ***
@@ -86,8 +86,6 @@ class Formulario_Hapvida
         add_shortcode('formulario_hapvida_sem_titulo', array($this, 'shortcode_sem_titulo'));
 
 
-        // *** NOVO: Carrega o sistema de tracking de leads ***
-        add_action('init', array($this, 'init_lead_tracking'));
 
 
         $this->ensure_timezone_configured();
@@ -1676,15 +1674,6 @@ class Formulario_Hapvida
         }
     }
 
-    public function init_lead_tracking()
-    {
-        global $formulario_hapvida_lead_tracking;
-
-        if (class_exists('Formulario_Hapvida_Lead_Tracking') && !$formulario_hapvida_lead_tracking) {
-            $formulario_hapvida_lead_tracking = new Formulario_Hapvida_Lead_Tracking();
-            $this->log("Sistema de Lead Tracking inicializado");
-        }
-    }
 
 
     private function log($message)
@@ -3156,41 +3145,6 @@ class Formulario_Hapvida
             'pagina_origem' => $form_data['pagina_origem']
         );
 
-        // *** VERIFICA REDISTRIBUIÇÃ•ES ***
-        $enable_redistributions = isset($options['enable_redistributions']) ?
-            ($options['enable_redistributions'] === '1' || $options['enable_redistributions'] === true) : true;
-
-        $this->log("ðŸ”§ [CORREÇÃO] Redistribuições habilitadas: " . ($enable_redistributions ? 'SIM' : 'NÃO'));
-
-        // *** SE REDISTRIBUIÇÃ•ES HABILITADAS - CRIA LEAD TRACKING ***
-        if ($enable_redistributions) {
-            global $formulario_hapvida_lead_tracking;
-
-            if ($formulario_hapvida_lead_tracking && method_exists($formulario_hapvida_lead_tracking, 'create_lead_tracking')) {
-                $this->log("✅ Criando lead tracking para sistema de confirmação");
-
-                $tracking_result = $formulario_hapvida_lead_tracking->create_lead_tracking($form_data, $vendedor);
-
-                if ($tracking_result && isset($tracking_result['link_confirmacao'])) {
-                    $filtered_form_data['link_confirmacao'] = $tracking_result['link_confirmacao'];
-                    $filtered_form_data['expira_em'] = $tracking_result['expira_em'];
-                    $filtered_form_data['timeout_minutos'] = $tracking_result['timeout_minutos'];
-                    $filtered_form_data['sistema_confirmacao_ativo'] = true;
-
-                    $this->log("ðŸ”— Link de confirmação gerado: " . $tracking_result['link_confirmacao']);
-                    $this->log("â° Timeout aplicado: " . $tracking_result['timeout_minutos'] . " minutos");
-                }
-            } else {
-                $this->log("âš ï¸ Lead tracking não disponível - enviando sem sistema de confirmação");
-                $filtered_form_data['sistema_confirmacao_ativo'] = false;
-                $filtered_form_data['motivo_sem_confirmacao'] = 'Sistema de lead tracking não disponível';
-            }
-        } else {
-            $this->log("ðŸš« Redistribuições desabilitadas - enviando sem link de confirmação");
-            $filtered_form_data['sistema_confirmacao_ativo'] = false;
-            $filtered_form_data['motivo_sem_confirmacao'] = 'Redistribuições desabilitadas nas configurações';
-        }
-
         // *** ENVIO DO WEBHOOK ***
         $this->log("ðŸ“¤ Enviando webhook para: " . substr($webhook_url, 0, 50) . "...");
         $this->log("ðŸ“Š Data/Hora no webhook: {$data_envio} {$hora_envio}");
@@ -3216,6 +3170,14 @@ class Formulario_Hapvida
         if ($response_code >= 200 && $response_code < 300) {
             $this->log("✅ Webhook enviado com sucesso!");
             $this->save_webhook_entry($filtered_form_data, 'success', '', $response_code);
+
+            // Registra entrega pendente para monitoramento via Evolution API
+            global $hapvida_delivery_tracking;
+            if ($hapvida_delivery_tracking) {
+                $vendedor['grupo'] = $grupo;
+                $hapvida_delivery_tracking->register_pending_delivery($vendedor, $form_data['lead_id']);
+            }
+
             return true;
         } else {
             $error_message = "HTTP {$response_code}";
@@ -3226,136 +3188,7 @@ class Formulario_Hapvida
         }
     }
 
-    public function send_confirmation_webhook($lead_data)
-    {
-        try {
-            // *** LOG DE INÃCIO ***
-            $this->log("ðŸ“¤ [CORREÇÃO] Iniciando send_confirmation_webhook");
-            error_log("HAPVIDA DEBUG: send_confirmation_webhook iniciado");
-
-            $options = get_option($this->settings_option_name);
-
-            // *** VALIDAÇÃO DOS DADOS ***
-            if (!$lead_data || !isset($lead_data['lead_id'])) {
-                $this->log("âŒ [CORREÇÃO] Dados do lead inválidos para webhook de confirmação");
-                error_log("HAPVIDA ERROR: Dados lead inválidos para confirmação");
-                return false;
-            }
-
-            // *** EXTRAI DADOS DO LEAD ***
-            $form_data = isset($lead_data['form_data']) ? $lead_data['form_data'] : array();
-            $vendedor_atual = isset($lead_data['vendedor_atual']) ? $lead_data['vendedor_atual'] : array();
-            $grupo = isset($vendedor_atual['grupo']) ? strtolower($vendedor_atual['grupo']) : 'drv';
-
-            // *** DETERMINA URL DO WEBHOOK ***
-            $webhook_url = '';
-            if ($grupo === 'drv') {
-                $webhook_url = isset($options['webhook_url_drv_confirmation']) ?
-                    trim($options['webhook_url_drv_confirmation']) : '';
-            } else {
-                $webhook_url = isset($options['webhook_url_seu_souza_confirmation']) ?
-                    trim($options['webhook_url_seu_souza_confirmation']) : '';
-            }
-
-            if (empty($webhook_url)) {
-                $this->log("âš ï¸ [CORREÇÃO] URL de confirmação não configurada para grupo {$grupo}");
-                return false;
-            }
-
-            // *** OBTÉM CONTAGENS ***
-            $today = current_time('Y-m-d');
-            $current_month = current_time('Y-m');
-            $daily_submissions = get_option($this->daily_submissions_option, array());
-            $monthly_submissions = get_option($this->monthly_submissions_option, array());
-            $today_count = isset($daily_submissions[$today]) ? $daily_submissions[$today] : 0;
-            $month_count = isset($monthly_submissions[$current_month]) ? $monthly_submissions[$current_month] : 0;
-
-            // *** PÃGINA DE ORIGEM ***
-            $pagina_origem = isset($form_data['pagina_origem']) ? $form_data['pagina_origem'] :
-                (isset($_SERVER['HTTP_REFERER']) ? $_SERVER['HTTP_REFERER'] : home_url());
-
-            // *** MONTA DADOS DO WEBHOOK ***
-            $now = new DateTime('now', new DateTimeZone($this->get_wp_timezone()));
-            $webhook_data = array(
-                'lead_id' => $lead_data['lead_id'],
-                'nome' => isset($form_data['nome']) ? $form_data['nome'] : (isset($form_data['name']) ? $form_data['name'] : 'N/A'),
-                'telefone' => isset($form_data['telefone']) ? $form_data['telefone'] : 'N/A',
-                'cidade' => isset($form_data['cidade']) ? $form_data['cidade'] : 'N/A',
-                'tipo_de_plano' => isset($form_data['tipo_de_plano']) ? $form_data['tipo_de_plano'] :
-                    (isset($form_data['qual_plano']) ? $form_data['qual_plano'] : 'N/A'),
-                'quantidade_de_pessoas' => isset($form_data['quantidade_de_pessoas']) ? $form_data['quantidade_de_pessoas'] :
-                    (isset($form_data['qtd_pessoas']) ? $form_data['qtd_pessoas'] : '1'),
-                'idades' => isset($form_data['idades']) ? $form_data['idades'] :
-                    (isset($form_data['ages']) ? (is_array($form_data['ages']) ? implode(', ', $form_data['ages']) : $form_data['ages']) : 'N/A'),
-                'atendente' => isset($vendedor_atual['nome']) ? $vendedor_atual['nome'] : 'N/A',
-                'telefone_vendedor' => isset($vendedor_atual['telefone']) ? $vendedor_atual['telefone'] : 'N/A',
-                'vendedor_id' => isset($vendedor_atual['vendedor_id']) ? $vendedor_atual['vendedor_id'] : '', // NOVO CAMPO
-                'grupo' => $grupo,
-                'data_envio' => $now->format('d-m-Y'),
-                'hora_submissao' => $now->format('H:i:s'),
-                'status' => 'confirmado',
-                'confirmado_em' => isset($lead_data['confirmado_em']) ? $lead_data['confirmado_em'] : $now->format('Y-m-d H:i:s'),
-                'webhook_type' => 'confirmation',
-                'was_redistributed' => isset($lead_data['tentativas']) && $lead_data['tentativas'] > 0,
-                'total_attempts' => isset($lead_data['tentativas']) ? ($lead_data['tentativas'] + 1) : 1,
-                'created_at' => isset($lead_data['created_at']) ? $lead_data['created_at'] : '',
-                'contagem_diaria' => $today_count,
-                'contagem_mensal' => $month_count,
-                'pagina_origem' => $pagina_origem,
-            );
-
-            $json_data = json_encode($webhook_data);
-            $this->log("ðŸ“ [CORREÇÃO] JSON de confirmação (primeiros 500 chars): " . substr($json_data, 0, 500) . (strlen($json_data) > 500 ? '...' : ''));
-            error_log("HAPVIDA DEBUG: Enviando JSON confirmação com tamanho: " . strlen($json_data) . " bytes - ID vendedor incluído");
-
-            // *** ENVIA WEBHOOK DE CONFIRMAÇÃO ***
-            $response = wp_remote_post($webhook_url, array(
-                'body' => json_encode($webhook_data),
-                'headers' => array('Content-Type' => 'application/json'),
-                'timeout' => 15,
-                'blocking' => true,
-                'sslverify' => false
-            ));
-
-            // *** LOG DA RESPOSTA ***
-            if (is_wp_error($response)) {
-                $error_message = $response->get_error_message();
-                $this->log("âŒ [CORREÇÃO] ERRO webhook de confirmação ({$grupo}): " . $error_message);
-                error_log("HAPVIDA ERROR: Webhook confirmação falhou - " . $error_message);
-
-                // Salva webhook falho para retry
-                $this->save_webhook_entry($webhook_data, 'pending', $error_message);
-                return false;
-            } else {
-                $response_code = wp_remote_retrieve_response_code($response);
-                $response_body = wp_remote_retrieve_body($response);
-
-                if ($response_code >= 200 && $response_code < 300) {
-                    $this->log("✅ [CORREÇÃO] Webhook de confirmação enviado com sucesso - Lead ID: {$lead_data['lead_id']} - HTTP {$response_code}");
-                    $this->log("✅ [CORREÇÃO] ID do vendedor enviado: {$webhook_data['vendedor_id']}");
-                    error_log("HAPVIDA SUCCESS: Webhook confirmação enviado - HTTP {$response_code}, ID vendedor: {$webhook_data['vendedor_id']}");
-
-                    // Salva webhook como concluído
-                    $this->save_webhook_entry($webhook_data, 'completed', '', $response_code);
-                    return true;
-                } else {
-                    $this->log("âŒ [CORREÇÃO] Webhook de confirmação falhou - Lead ID: {$lead_data['lead_id']} - HTTP {$response_code}");
-                    error_log("HAPVIDA ERROR: Webhook confirmação falhou - HTTP {$response_code}");
-
-                    // Salva webhook falho para retry
-                    $this->save_webhook_entry($webhook_data, 'pending', "HTTP {$response_code}", $response_code);
-                    return false;
-                }
-            }
-
-        } catch (Exception $e) {
-            $this->log("âŒ [CORREÇÃO] ERRO CRÃTICO na função send_confirmation_webhook: " . $e->getMessage());
-            error_log("HAPVIDA CRITICAL ERROR: send_confirmation_webhook - " . $e->getMessage());
-            return false;
-        }
-    }
-
-    private function calculate_time_to_confirmation($created_at, $confirmado_em)
+        private function calculate_time_to_confirmation($created_at, $confirmado_em)
     {
         try {
             $created = new DateTime($created_at);
@@ -5698,55 +5531,6 @@ function get_formulario_hapvida_instance()
     return $instance;
 }
 
-// Singleton para o lead tracking
-
-// Substitua esta parte no final do formulario-hapvida.php
-function get_lead_tracking_instance()
-{
-    static $instance = null;
-    static $initialized = false;
-
-    // PROTEÇÃO: Se já foi inicializado, retorna a instância existente
-    if ($initialized) {
-        return $instance;
-    }
-
-    // PROTEÇÃO: Verifica se já existe globalmente
-    if (isset($GLOBALS['formulario_hapvida_lead_tracking'])) {
-        $initialized = true;
-        return $GLOBALS['formulario_hapvida_lead_tracking'];
-    }
-
-    if ($instance === null) {
-        $lead_tracking_file = plugin_dir_path(__FILE__) . 'lead-tracking.php';
-        if (file_exists($lead_tracking_file)) {
-            if (!class_exists('Formulario_Hapvida_Lead_Tracking')) {
-                require_once $lead_tracking_file;
-            }
-            $instance = new Formulario_Hapvida_Lead_Tracking();
-            $GLOBALS['formulario_hapvida_lead_tracking'] = $instance;
-            $initialized = true;
-            error_log("=== INSTÃ‚NCIA ÚNICA DO LEAD TRACKING CRIADA ===");
-        }
-    }
-
-    return $instance;
-}
-
-// CORREÇÃO: Inicializa apenas se não existir
-if (!isset($GLOBALS['formulario_hapvida_lead_tracking'])) {
-    $GLOBALS['formulario_hapvida_lead_tracking'] = get_lead_tracking_instance();
-}
-
-// Inicializa as instâncias apenas uma vez
-if (!isset($GLOBALS['formulario_hapvida'])) {
-    get_formulario_hapvida_instance();
-}
-
-if (!isset($GLOBALS['formulario_hapvida_lead_tracking'])) {
-    get_lead_tracking_instance();
-}
-
 // Inclui o sistema de limpeza automática apenas uma vez
 $cleanup_file = plugin_dir_path(__FILE__) . 'webhook-cleanup.php';
 if (file_exists($cleanup_file) && !class_exists('Formulario_Hapvida_Webhook_Cleanup')) {
@@ -5754,12 +5538,3 @@ if (file_exists($cleanup_file) && !class_exists('Formulario_Hapvida_Webhook_Clea
 }
 
 
-add_action('rest_api_init', function () {
-    global $formulario_hapvida_lead_tracking;
-    if ($formulario_hapvida_lead_tracking && method_exists($formulario_hapvida_lead_tracking, 'register_confirmation_endpoint')) {
-        $formulario_hapvida_lead_tracking->register_confirmation_endpoint();
-    }
-}, 5); // Prioridade alta
-
-// REMOVIDO: Registro duplicado no hook 'init' causava erro
-// Rotas REST devem ser registradas apenas em 'rest_api_init'

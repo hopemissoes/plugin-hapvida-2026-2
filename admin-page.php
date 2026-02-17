@@ -5772,6 +5772,131 @@ class Formulario_Hapvida_Admin
                     </div>
                 </div>
 
+                <!-- MONITORAMENTO DE ENTREGAS (Evolution API) -->
+                <div class="hapvida-row">
+                    <div class="hapvida-column full-width">
+                        <div class="hapvida-card">
+                            <h2><i class="dashicons dashicons-visibility"></i> Monitoramento de Entregas (Evolution API)</h2>
+                            <p class="hapvida-auto-activate-desc" style="margin-bottom: 16px;">
+                                Monitora se os vendedores estão recebendo as mensagens via WhatsApp.
+                                Vendedores que não receberem confirmação de entrega em <strong>2 horas</strong> são inativados automaticamente.
+                            </p>
+
+                            <?php
+                            $pending_deliveries = get_option('hapvida_pending_deliveries', array());
+                            $deactivation_log = get_option('hapvida_auto_deactivation_log', array());
+
+                            $count_pendentes = 0;
+                            $count_entregues = 0;
+                            $count_expirados = 0;
+                            foreach ($pending_deliveries as $d) {
+                                switch ($d['status']) {
+                                    case 'pendente': $count_pendentes++; break;
+                                    case 'entregue': $count_entregues++; break;
+                                    case 'expirado': $count_expirados++; break;
+                                }
+                            }
+                            ?>
+
+                            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 20px;">
+                                <div style="background: #fef3c7; border: 1px solid #f59e0b; border-radius: 8px; padding: 16px; text-align: center;">
+                                    <div style="font-size: 28px; font-weight: 700; color: #d97706;"><?php echo $count_pendentes; ?></div>
+                                    <div style="font-size: 13px; color: #92400e;">Pendentes</div>
+                                </div>
+                                <div style="background: #d1fae5; border: 1px solid #10b981; border-radius: 8px; padding: 16px; text-align: center;">
+                                    <div style="font-size: 28px; font-weight: 700; color: #059669;"><?php echo $count_entregues; ?></div>
+                                    <div style="font-size: 13px; color: #065f46;">Entregues</div>
+                                </div>
+                                <div style="background: #fee2e2; border: 1px solid #ef4444; border-radius: 8px; padding: 16px; text-align: center;">
+                                    <div style="font-size: 28px; font-weight: 700; color: #dc2626;"><?php echo $count_expirados; ?></div>
+                                    <div style="font-size: 13px; color: #991b1b;">Expirados (Vendedor Inativado)</div>
+                                </div>
+                            </div>
+
+                            <?php if (!empty($deactivation_log)): ?>
+                                <h3 style="margin: 20px 0 10px; font-size: 15px; color: #dc2626;">Inativações Automáticas Recentes</h3>
+                                <table class="widefat striped" style="font-size: 13px;">
+                                    <thead>
+                                        <tr>
+                                            <th>Vendedor</th>
+                                            <th>Telefone</th>
+                                            <th>Grupo</th>
+                                            <th>Lead</th>
+                                            <th>Enviado em</th>
+                                            <th>Inativado em</th>
+                                            <th>Motivo</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <?php foreach (array_reverse(array_slice($deactivation_log, -10)) as $log_entry): ?>
+                                        <tr>
+                                            <td><strong><?php echo esc_html($log_entry['vendedor_nome']); ?></strong></td>
+                                            <td><?php echo esc_html($log_entry['vendedor_telefone']); ?></td>
+                                            <td><span style="background: <?php echo $log_entry['grupo'] === 'drv' ? '#dbeafe' : '#fff7ed'; ?>; padding: 2px 8px; border-radius: 4px; font-size: 11px;"><?php echo esc_html(strtoupper($log_entry['grupo'])); ?></span></td>
+                                            <td><code><?php echo esc_html($log_entry['lead_id']); ?></code></td>
+                                            <td><?php echo esc_html($log_entry['enviado_em']); ?></td>
+                                            <td><?php echo esc_html($log_entry['inativado_em']); ?></td>
+                                            <td style="color: #dc2626;"><?php echo esc_html($log_entry['motivo']); ?></td>
+                                        </tr>
+                                        <?php endforeach; ?>
+                                    </tbody>
+                                </table>
+                            <?php else: ?>
+                                <div class="hapvida-alert success">
+                                    <strong>Nenhuma inativação automática registrada.</strong>
+                                </div>
+                            <?php endif; ?>
+
+                            <?php if ($count_pendentes > 0): ?>
+                                <h3 style="margin: 20px 0 10px; font-size: 15px; color: #d97706;">Entregas Pendentes</h3>
+                                <table class="widefat striped" style="font-size: 13px;">
+                                    <thead>
+                                        <tr>
+                                            <th>Vendedor</th>
+                                            <th>Telefone</th>
+                                            <th>Lead</th>
+                                            <th>Enviado em</th>
+                                            <th>Tempo restante</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <?php foreach ($pending_deliveries as $delivery):
+                                            if ($delivery['status'] !== 'pendente') continue;
+                                            $elapsed = time() - $delivery['enviado_timestamp'];
+                                            $remaining = 7200 - $elapsed;
+                                            $remaining_min = max(0, round($remaining / 60));
+                                        ?>
+                                        <tr>
+                                            <td><strong><?php echo esc_html($delivery['vendedor_nome']); ?></strong></td>
+                                            <td><?php echo esc_html($delivery['vendedor_telefone']); ?></td>
+                                            <td><code><?php echo esc_html($delivery['lead_id']); ?></code></td>
+                                            <td><?php echo esc_html($delivery['enviado_em']); ?></td>
+                                            <td>
+                                                <?php if ($remaining_min > 0): ?>
+                                                    <span style="color: #d97706; font-weight: 600;"><?php echo $remaining_min; ?> min</span>
+                                                <?php else: ?>
+                                                    <span style="color: #dc2626; font-weight: 600;">Expirado (aguardando cron)</span>
+                                                <?php endif; ?>
+                                            </td>
+                                        </tr>
+                                        <?php endforeach; ?>
+                                    </tbody>
+                                </table>
+                            <?php endif; ?>
+
+                            <div style="margin-top: 16px; padding: 12px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px;">
+                                <p style="margin: 0 0 8px; font-size: 13px; font-weight: 600;">Endpoint para Evolution API:</p>
+                                <code style="display: block; padding: 8px; background: #1e293b; color: #22d3ee; border-radius: 4px; font-size: 12px; word-break: break-all;">
+                                    POST <?php echo esc_html(rest_url('formulario-hapvida/v1/evolution-webhook')); ?>
+                                </code>
+                                <p style="margin: 8px 0 0; font-size: 12px; color: #64748b;">
+                                    Configure este endpoint na sua Evolution API ou n8n para receber confirmações de entrega de mensagens.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <div class="hapvida-row">
                     <div class="hapvida-column full-width">
                         <div class="hapvida-card">
