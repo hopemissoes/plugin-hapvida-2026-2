@@ -85,6 +85,9 @@ class Formulario_Hapvida_Admin
         add_action('wp_ajax_get_delivery_stats', array($this, 'ajax_get_delivery_stats'));
         add_action('wp_ajax_nopriv_get_delivery_stats', array($this, 'ajax_get_delivery_stats'));
 
+        add_action('wp_ajax_toggle_auto_deactivation', array($this, 'ajax_toggle_auto_deactivation'));
+        add_action('wp_ajax_nopriv_toggle_auto_deactivation', array($this, 'ajax_toggle_auto_deactivation'));
+
         // Diagnóstico de email
         add_action('admin_action_diagnose_email_hapvida', array($this, 'handle_email_diagnostic'));
     }
@@ -100,7 +103,21 @@ class Formulario_Hapvida_Admin
         }
 
         $stats = $hapvida_delivery_tracking->get_stats_summary();
+        $settings = get_option('formulario_hapvida_settings', array());
+        $stats['server_time'] = time();
+        $stats['delivery_timeout'] = 7200;
+        $stats['auto_deactivation_enabled'] = isset($settings['enable_auto_deactivation']) ? $settings['enable_auto_deactivation'] : '1';
         wp_send_json_success($stats);
+    }
+
+    // AJAX: Toggle auto-deactivation setting (sem login)
+    public function ajax_toggle_auto_deactivation()
+    {
+        $enabled = isset($_POST['enabled']) ? sanitize_text_field($_POST['enabled']) : '1';
+        $settings = get_option('formulario_hapvida_settings', array());
+        $settings['enable_auto_deactivation'] = $enabled;
+        update_option('formulario_hapvida_settings', $settings);
+        wp_send_json_success(array('enabled' => $enabled));
     }
 
     // NOVA FUNÇÃO: Toggle vendedor status para frontend (sem login)
@@ -2248,9 +2265,18 @@ class Formulario_Hapvida_Admin
         ?>
         <div class="section-header">
             <h2><i class="fas fa-satellite-dish"></i> Monitoramento de Entregas</h2>
-            <button id="refresh-delivery-stats" class="control-btn secondary small">
-                <i class="fas fa-sync-alt"></i> Atualizar
-            </button>
+            <div class="delivery-header-actions">
+                <div class="auto-deactivation-toggle">
+                    <label class="toggle-switch" title="Inativacao automatica apos 2h sem confirmacao">
+                        <input type="checkbox" id="toggle-auto-deactivation" checked>
+                        <span class="toggle-slider"></span>
+                    </label>
+                    <span class="toggle-label" id="auto-deactivation-label">Inativar auto</span>
+                </div>
+                <button id="refresh-delivery-stats" class="control-btn secondary small">
+                    <i class="fas fa-sync-alt"></i> Atualizar
+                </button>
+            </div>
         </div>
 
         <div class="delivery-stats-grid">
@@ -2276,6 +2302,57 @@ class Formulario_Hapvida_Admin
 
         <script>
         (function() {
+            var ajaxUrl = '<?php echo admin_url("admin-ajax.php"); ?>';
+            var pendingData = [];
+            var serverTimeDiff = 0;
+            var deliveryTimeout = 7200;
+            var countdownInterval = null;
+
+            function formatCountdown(remainingSec) {
+                if (remainingSec <= 0) return '<span class="countdown-expired">EXPIRADO</span>';
+                var h = Math.floor(remainingSec / 3600);
+                var m = Math.floor((remainingSec % 3600) / 60);
+                var s = remainingSec % 60;
+                var parts = [];
+                if (h > 0) parts.push(h + 'h');
+                parts.push(('0' + m).slice(-2) + 'min');
+                parts.push(('0' + s).slice(-2) + 's');
+                return parts.join(' ');
+            }
+
+            function getStatusInfo(remainingSec) {
+                if (remainingSec <= 0) return { cls: 'status-danger', text: 'EXPIRADO' };
+                if (remainingSec <= 1800) return { cls: 'status-warning', text: 'ALERTA' };
+                return { cls: 'status-ok', text: 'Aguardando' };
+            }
+
+            function renderPendingTable() {
+                var container = document.getElementById('delivery-pending-list-container');
+                if (!pendingData || pendingData.length === 0) {
+                    container.innerHTML = '';
+                    return;
+                }
+                var nowServer = Math.floor(Date.now() / 1000) + serverTimeDiff;
+                var html = '<div class="delivery-pending-list"><h3><i class="fas fa-hourglass-half"></i> Entregas aguardando confirmacao</h3>';
+                html += '<table class="delivery-table"><thead><tr><th>Vendedor</th><th>Grupo</th><th>Tempo restante</th><th>Status</th></tr></thead><tbody>';
+                pendingData.forEach(function(p) {
+                    var elapsed = nowServer - p.enviado_timestamp;
+                    var remaining = Math.max(0, deliveryTimeout - elapsed);
+                    var info = getStatusInfo(remaining);
+                    html += '<tr><td>' + p.vendedor + '</td>';
+                    html += '<td><span class="grupo-badge">' + p.grupo.toUpperCase() + '</span></td>';
+                    html += '<td class="countdown-cell">' + formatCountdown(remaining) + '</td>';
+                    html += '<td><span class="status-badge ' + info.cls + '">' + info.text + '</span></td></tr>';
+                });
+                html += '</tbody></table></div>';
+                container.innerHTML = html;
+            }
+
+            function startCountdown() {
+                if (countdownInterval) clearInterval(countdownInterval);
+                countdownInterval = setInterval(renderPendingTable, 1000);
+            }
+
             function loadDeliveryStats() {
                 var btn = document.getElementById('refresh-delivery-stats');
                 if (btn) btn.classList.add('spinning');
@@ -2283,41 +2360,38 @@ class Formulario_Hapvida_Admin
                 var formData = new FormData();
                 formData.append('action', 'get_delivery_stats');
 
-                fetch('<?php echo admin_url("admin-ajax.php"); ?>', {
-                    method: 'POST',
-                    body: formData
-                })
+                fetch(ajaxUrl, { method: 'POST', body: formData })
                 .then(function(r) { return r.json(); })
                 .then(function(res) {
                     if (btn) btn.classList.remove('spinning');
                     if (!res.success) return;
                     var d = res.data;
 
+                    // Calcula diferenca entre tempo do servidor e do navegador
+                    serverTimeDiff = d.server_time - Math.floor(Date.now() / 1000);
+                    deliveryTimeout = d.delivery_timeout || 7200;
+
                     document.getElementById('delivery-pendentes').textContent = d.pendentes;
                     document.getElementById('delivery-entregues').textContent = d.entregues;
                     document.getElementById('delivery-expirados').textContent = d.expirados;
 
-                    // Renderiza lista de pendentes
-                    var pendingHtml = '';
-                    if (d.pendentes_list && d.pendentes_list.length > 0) {
-                        pendingHtml = '<div class="delivery-pending-list"><h3>Entregas aguardando confirmacao</h3>';
-                        pendingHtml += '<table class="delivery-table"><thead><tr><th>Vendedor</th><th>Grupo</th><th>Tempo</th><th>Status</th></tr></thead><tbody>';
-                        d.pendentes_list.forEach(function(p) {
-                            var statusClass = p.minutos >= 120 ? 'status-danger' : (p.minutos >= 90 ? 'status-warning' : 'status-ok');
-                            var statusText = p.minutos >= 120 ? 'EXPIRADO' : (p.minutos >= 90 ? 'ALERTA' : 'Aguardando');
-                            pendingHtml += '<tr><td>' + p.vendedor + '</td>';
-                            pendingHtml += '<td><span class="grupo-badge">' + p.grupo.toUpperCase() + '</span></td>';
-                            pendingHtml += '<td>' + p.minutos + ' min</td>';
-                            pendingHtml += '<td><span class="status-badge ' + statusClass + '">' + statusText + '</span></td></tr>';
-                        });
-                        pendingHtml += '</tbody></table></div>';
+                    // Toggle state
+                    var toggleEl = document.getElementById('toggle-auto-deactivation');
+                    var labelEl = document.getElementById('auto-deactivation-label');
+                    if (toggleEl) {
+                        toggleEl.checked = (d.auto_deactivation_enabled === '1');
+                        if (labelEl) labelEl.textContent = toggleEl.checked ? 'Inativar auto' : 'Inativar auto (OFF)';
                     }
-                    document.getElementById('delivery-pending-list-container').innerHTML = pendingHtml;
+
+                    // Guarda dados e renderiza com countdown
+                    pendingData = d.pendentes_list || [];
+                    renderPendingTable();
+                    startCountdown();
 
                     // Renderiza log de inativacoes
                     var logHtml = '';
                     if (d.inativacoes_recentes && d.inativacoes_recentes.length > 0) {
-                        logHtml = '<div class="delivery-deactivation-log"><h3>Inativacoes automaticas recentes</h3>';
+                        logHtml = '<div class="delivery-deactivation-log"><h3><i class="fas fa-ban"></i> Inativacoes automaticas recentes</h3>';
                         logHtml += '<table class="delivery-table"><thead><tr><th>Vendedor</th><th>Grupo</th><th>Inativado em</th><th>Motivo</th></tr></thead><tbody>';
                         d.inativacoes_recentes.forEach(function(log) {
                             logHtml += '<tr><td>' + log.vendedor_nome + '</td>';
@@ -2334,7 +2408,25 @@ class Formulario_Hapvida_Admin
                 });
             }
 
-            // Carrega ao abrir e atualiza a cada 30 segundos
+            // Toggle auto-deactivation
+            document.getElementById('toggle-auto-deactivation').addEventListener('change', function() {
+                var enabled = this.checked ? '1' : '0';
+                var labelEl = document.getElementById('auto-deactivation-label');
+                if (labelEl) labelEl.textContent = this.checked ? 'Inativar auto' : 'Inativar auto (OFF)';
+
+                var formData = new FormData();
+                formData.append('action', 'toggle_auto_deactivation');
+                formData.append('enabled', enabled);
+                fetch(ajaxUrl, { method: 'POST', body: formData })
+                .then(function(r) { return r.json(); })
+                .then(function(res) {
+                    if (!res.success) {
+                        alert('Erro ao salvar configuracao');
+                    }
+                });
+            });
+
+            // Carrega ao abrir e atualiza dados a cada 30 segundos
             loadDeliveryStats();
             setInterval(loadDeliveryStats, 30000);
 
@@ -2346,6 +2438,58 @@ class Formulario_Hapvida_Admin
         </script>
 
         <style>
+            .delivery-header-actions {
+                display: flex;
+                align-items: center;
+                gap: 15px;
+            }
+            .auto-deactivation-toggle {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+            }
+            .toggle-switch {
+                position: relative;
+                display: inline-block;
+                width: 44px;
+                height: 24px;
+                cursor: pointer;
+            }
+            .toggle-switch input {
+                opacity: 0;
+                width: 0;
+                height: 0;
+            }
+            .toggle-slider {
+                position: absolute;
+                top: 0; left: 0; right: 0; bottom: 0;
+                background-color: #cbd5e1;
+                border-radius: 24px;
+                transition: .3s;
+            }
+            .toggle-slider:before {
+                content: "";
+                position: absolute;
+                height: 18px;
+                width: 18px;
+                left: 3px;
+                bottom: 3px;
+                background-color: white;
+                border-radius: 50%;
+                transition: .3s;
+            }
+            .toggle-switch input:checked + .toggle-slider {
+                background-color: #22c55e;
+            }
+            .toggle-switch input:checked + .toggle-slider:before {
+                transform: translateX(20px);
+            }
+            .toggle-label {
+                font-size: 13px;
+                font-weight: 600;
+                color: #475569;
+            }
+
             .delivery-stats-grid {
                 display: grid;
                 grid-template-columns: repeat(3, 1fr);
@@ -2398,6 +2542,16 @@ class Formulario_Hapvida_Admin
                 padding: 10px 12px;
                 border-bottom: 1px solid #f1f5f9;
             }
+            .countdown-cell {
+                font-family: 'Courier New', monospace;
+                font-weight: 700;
+                font-size: 15px;
+                color: #334155;
+            }
+            .countdown-expired {
+                color: #ef4444;
+                font-weight: 700;
+            }
             .grupo-badge {
                 background: #0054B8;
                 color: white;
@@ -2422,8 +2576,13 @@ class Formulario_Hapvida_Admin
                 color: #334155;
                 margin: 20px 0 10px 0;
             }
+            .delivery-pending-list h3 i,
+            .delivery-deactivation-log h3 i {
+                margin-right: 6px;
+            }
 
             @media (max-width: 600px) {
+                .delivery-header-actions { flex-direction: column; gap: 10px; align-items: flex-end; }
                 .delivery-stats-grid { grid-template-columns: 1fr; }
                 .delivery-table { font-size: 12px; }
                 .delivery-table th, .delivery-table td { padding: 8px 6px; }

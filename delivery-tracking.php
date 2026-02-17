@@ -369,6 +369,14 @@ class Hapvida_Delivery_Tracking
      */
     public function check_expired_deliveries()
     {
+        // Verifica se a inativação automática está ativada
+        $settings = get_option(self::OPTION_SETTINGS, array());
+        $auto_deactivation_enabled = isset($settings['enable_auto_deactivation']) ? $settings['enable_auto_deactivation'] : '1';
+        if ($auto_deactivation_enabled !== '1') {
+            error_log("HAPVIDA DELIVERY: Inativação automática DESATIVADA nas configurações. Pulando verificação.");
+            return;
+        }
+
         $pending = get_option(self::OPTION_PENDING, array());
 
         if (empty($pending)) {
@@ -626,7 +634,8 @@ class Hapvida_Delivery_Tracking
                         'vendedor' => $delivery['vendedor_nome'],
                         'grupo' => $delivery['grupo'],
                         'minutos' => $elapsed_min,
-                        'lead_id' => $delivery['lead_id']
+                        'lead_id' => $delivery['lead_id'],
+                        'enviado_timestamp' => $delivery['enviado_timestamp']
                     );
                     break;
                 case 'entregue':
