@@ -598,14 +598,7 @@ class Formulario_Hapvida_Admin
             'formulario_hapvida_general'
         );
 
-        // Campo Redirecionar para página de obrigado
-        add_settings_field(
-            'redirect_obrigado',
-            'Redirecionar para Página de Obrigado',
-            array($this, 'redirect_obrigado_callback'),
-            'formulario-hapvida-admin',
-            'formulario_hapvida_general'
-        );
+        // redirect_obrigado tem form dedicado na aba de configurações, não registra aqui para evitar duplicação
 
     }
 
@@ -4153,6 +4146,60 @@ class Formulario_Hapvida_Admin
                                 Monitora se os vendedores estão recebendo as mensagens via WhatsApp.
                                 Vendedores que não receberem confirmação de entrega em <strong>2 horas</strong> são inativados automaticamente.
                             </p>
+
+                            <?php
+                            $settings_delivery = get_option($this->option_name, array());
+                            $auto_deact_enabled = isset($settings_delivery['enable_auto_deactivation']) ? $settings_delivery['enable_auto_deactivation'] : '1';
+                            ?>
+                            <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 20px; padding: 14px 18px; background: <?php echo $auto_deact_enabled === '1' ? '#f0fdf4' : '#fef2f2'; ?>; border: 1px solid <?php echo $auto_deact_enabled === '1' ? '#bbf7d0' : '#fecaca'; ?>; border-radius: 10px;">
+                                <label style="position: relative; display: inline-block; width: 50px; height: 26px; cursor: pointer;">
+                                    <input type="checkbox" id="admin-toggle-auto-deactivation" <?php checked($auto_deact_enabled, '1'); ?> style="opacity: 0; width: 0; height: 0;">
+                                    <span style="position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: <?php echo $auto_deact_enabled === '1' ? '#22c55e' : '#cbd5e1'; ?>; border-radius: 26px; transition: .3s;"></span>
+                                    <span style="position: absolute; content: ''; height: 20px; width: 20px; left: <?php echo $auto_deact_enabled === '1' ? '26px' : '3px'; ?>; bottom: 3px; background-color: white; border-radius: 50%; transition: .3s;"></span>
+                                </label>
+                                <div>
+                                    <strong style="color: <?php echo $auto_deact_enabled === '1' ? '#166534' : '#991b1b'; ?>;" id="admin-auto-deact-label">
+                                        <?php echo $auto_deact_enabled === '1' ? 'Inativacao automatica ATIVADA' : 'Inativacao automatica DESATIVADA'; ?>
+                                    </strong>
+                                    <p style="margin: 2px 0 0; font-size: 12px; color: #64748b;">
+                                        Vendedores sem confirmacao de entrega em 2h serao inativados automaticamente (horario comercial).
+                                    </p>
+                                </div>
+                            </div>
+                            <script>
+                            (function(){
+                                var toggle = document.getElementById('admin-toggle-auto-deactivation');
+                                if (!toggle) return;
+                                toggle.addEventListener('change', function(){
+                                    var enabled = this.checked ? '1' : '0';
+                                    var container = this.closest('div[style*="display: flex"]');
+                                    var label = document.getElementById('admin-auto-deact-label');
+                                    var slider = this.nextElementSibling;
+                                    var knob = slider.nextElementSibling;
+
+                                    if (this.checked) {
+                                        container.style.background = '#f0fdf4';
+                                        container.style.borderColor = '#bbf7d0';
+                                        slider.style.backgroundColor = '#22c55e';
+                                        knob.style.left = '26px';
+                                        label.style.color = '#166534';
+                                        label.textContent = 'Inativacao automatica ATIVADA';
+                                    } else {
+                                        container.style.background = '#fef2f2';
+                                        container.style.borderColor = '#fecaca';
+                                        slider.style.backgroundColor = '#cbd5e1';
+                                        knob.style.left = '3px';
+                                        label.style.color = '#991b1b';
+                                        label.textContent = 'Inativacao automatica DESATIVADA';
+                                    }
+
+                                    var formData = new FormData();
+                                    formData.append('action', 'toggle_auto_deactivation');
+                                    formData.append('enabled', enabled);
+                                    fetch('<?php echo admin_url("admin-ajax.php"); ?>', { method: 'POST', body: formData });
+                                });
+                            })();
+                            </script>
 
                             <?php
                             $pending_deliveries = get_option('hapvida_pending_deliveries', array());
