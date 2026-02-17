@@ -302,8 +302,21 @@ class Hapvida_Delivery_Tracking
     // =========================================================================
 
     /**
+     * Verifica se está em horário comercial (8h às 18h, seg-sex)
+     */
+    private function is_horario_comercial()
+    {
+        $current_hour = intval(current_time('H'));
+        $current_day = intval(current_time('N')); // 1=seg, 7=dom
+        return ($current_hour >= 8 && $current_hour < 18 && $current_day <= 5);
+    }
+
+    /**
      * Verifica entregas pendentes que passaram do timeout de 2 horas
      * Desativa automaticamente os vendedores que não receberam
+     *
+     * IMPORTANTE: Só desativa em horário comercial (8h-18h, seg-sex).
+     * Fora do horário, o vendedor pode estar com internet desligada (dormindo).
      */
     public function check_expired_deliveries()
     {
@@ -312,6 +325,8 @@ class Hapvida_Delivery_Tracking
         if (empty($pending)) {
             return;
         }
+
+        $is_business_hours = $this->is_horario_comercial();
 
         $now = time();
         $vendedores = get_option(self::OPTION_VENDORS, array());
@@ -328,6 +343,13 @@ class Hapvida_Delivery_Tracking
 
             // Se passou do timeout (2 horas)
             if ($elapsed >= self::DELIVERY_TIMEOUT) {
+
+                // Fora do horário comercial: NÃO desativa, apenas loga
+                if (!$is_business_hours) {
+                    error_log("HAPVIDA DELIVERY: TIMEOUT ignorado (fora do horário comercial) - Lead {$delivery['lead_id']} para {$delivery['vendedor_nome']}");
+                    continue;
+                }
+
                 $delivery['status'] = 'expirado';
 
                 error_log("HAPVIDA DELIVERY: TIMEOUT - Lead {$delivery['lead_id']} para {$delivery['vendedor_nome']} - {$elapsed}s sem confirmação");
