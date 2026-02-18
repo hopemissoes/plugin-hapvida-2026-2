@@ -1098,7 +1098,9 @@ trait ShortcodeFormTrait {
                                 </span>
                                 <select id="hapvida-tipo-plano" name="form_fields[qual_plano]" required autocomplete="off">
                                     <option value="">Tipo de Plano</option>
-                                    <option value="individual">Individual/Familiar</option>
+                                    <option value="individual">Individual</option>
+                                    <option value="familiar">Familiar</option>
+                                    <option value="adesao">Adesão</option>
                                     <option value="empresarial">Empresarial</option>
                                 </select>
                                 <span class="hapvida-chevron">
