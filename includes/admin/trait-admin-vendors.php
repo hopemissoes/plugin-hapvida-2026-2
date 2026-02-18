@@ -320,12 +320,13 @@ trait AdminVendorsTrait {
 
         <script>
             jQuery(document).ready(function ($) {
+                var vendorsAjaxUrl = '<?php echo admin_url("admin-ajax.php"); ?>';
                 var vendorsData = [];
 
                 // Função para carregar lista de vendedores
                 function loadVendorsList() {
                     $.ajax({
-                        url: ajaxurl,
+                        url: vendorsAjaxUrl,
                         type: 'POST',
                         data: {
                             action: 'get_vendors_list_frontend'
@@ -423,7 +424,7 @@ trait AdminVendorsTrait {
                     $btn.prop('disabled', true).text('Processando...');
 
                     $.ajax({
-                        url: ajaxurl,
+                        url: vendorsAjaxUrl,
                         type: 'POST',
                         data: {
                             action: 'toggle_vendor_status_frontend',
