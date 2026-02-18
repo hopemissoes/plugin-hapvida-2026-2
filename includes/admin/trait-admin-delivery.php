@@ -145,7 +145,8 @@ trait AdminDeliveryTrait {
             function renderPendingTable() {
                 var container = document.getElementById('delivery-pending-list-container');
 
-                if (!pendingData || pendingData.length === 0) {
+                // Fora do horario comercial: nao mostra pendentes
+                if (!isHorarioComercial || !pendingData || pendingData.length === 0) {
                     container.innerHTML = '';
                     return;
                 }
@@ -169,7 +170,7 @@ trait AdminDeliveryTrait {
 
             function startCountdown() {
                 if (countdownInterval) clearInterval(countdownInterval);
-                if (pendingData.length > 0) {
+                if (isHorarioComercial && pendingData.length > 0) {
                     countdownInterval = setInterval(renderPendingTable, 1000);
                 }
             }
