@@ -4437,25 +4437,6 @@ class Formulario_Hapvida
     }
 
     /**
-     * *** MÉTODO AUXILIAR: get_current_timeout ***
-     */
-    private function get_current_timeout()
-    {
-        $options = get_option('formulario_hapvida_settings');
-
-        $current_hour = intval(current_time('H'));
-        $is_business_hours = ($current_hour >= 8 && $current_hour < 18);
-
-        if ($is_business_hours) {
-            return isset($options['business_hours_timeout']) ?
-                intval($options['business_hours_timeout']) : 10;
-        } else {
-            return isset($options['after_hours_timeout']) ?
-                intval($options['after_hours_timeout']) : 30;
-        }
-    }
-
-    /**
      * *** MÉTODO AUXILIAR: store_form_origin ***
      */
     private function store_form_origin($form_data)
