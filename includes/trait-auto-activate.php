@@ -119,7 +119,7 @@ trait AutoActivateTrait {
 
     public function ajax_toggle_auto_activate_seu_souza()
     {
-        check_ajax_referer('vendedores_nonce', 'security');
+        check_ajax_referer('save_vendedores', 'security');
         if (!current_user_can('manage_options')) {
             wp_send_json_error('Permissão negada');
         }
