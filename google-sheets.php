@@ -885,7 +885,7 @@ class Formulario_Hapvida_Google_Sheets
                             'properties' => array(
                                 'sheetId' => $new_sheet_id,
                                 'title' => $next_tab_name,
-                                'index' => $max_index + 1,
+                                'index' => 0,
                             ),
                             'fields' => 'title,index',
                         ),
