@@ -35,6 +35,10 @@ trait AdminDeliveryTrait {
         $hapvida_delivery_tracking->clear_pending_deliveries();
         $hapvida_delivery_tracking->clear_deactivation_log();
 
+        // Limpa também os registros de diagnóstico da Evolution API
+        delete_option('hapvida_webhook_debug_log');
+        delete_option('hapvida_webhook_processing_results');
+
         wp_send_json_success(array('message' => 'Registros limpos com sucesso'));
     }
 

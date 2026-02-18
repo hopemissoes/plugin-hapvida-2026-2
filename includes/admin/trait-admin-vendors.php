@@ -328,17 +328,20 @@ trait AdminVendorsTrait {
                     $.ajax({
                         url: vendorsAjaxUrl,
                         type: 'POST',
+                        dataType: 'json',
                         data: {
                             action: 'get_vendors_list_frontend'
                         },
                         success: function (response) {
-                            if (response.success) {
-                                vendorsData = response.data.vendors;
+                            if (response && response.success) {
+                                vendorsData = response.data.vendors || [];
                                 renderVendors();
+                            } else {
+                                console.error('Vendedores: resposta inesperada', response);
                             }
                         },
-                        error: function () {
-                            console.error('Erro ao carregar vendedores');
+                        error: function (xhr) {
+                            console.error('Vendedores: erro AJAX', xhr.status, xhr.responseText);
                         }
                     });
                 }
@@ -426,6 +429,7 @@ trait AdminVendorsTrait {
                     $.ajax({
                         url: vendorsAjaxUrl,
                         type: 'POST',
+                        dataType: 'json',
                         data: {
                             action: 'toggle_vendor_status_frontend',
                             vendedor_id: vendorId,
@@ -433,14 +437,15 @@ trait AdminVendorsTrait {
                             vendor_action: 'toggle'
                         },
                         success: function (response) {
-                            if (response.success) {
-                                loadVendorsList(); // Recarrega a lista
+                            if (response && response.success) {
+                                loadVendorsList();
                             } else {
-                                alert('Erro: ' + response.data);
+                                alert('Erro: ' + (response && response.data ? response.data : 'Resposta inesperada'));
+                                loadVendorsList();
                             }
                         },
-                        error: function () {
-                            alert('Erro ao atualizar status do vendedor');
+                        error: function (xhr) {
+                            alert('Erro ao atualizar status do vendedor (HTTP ' + xhr.status + ')');
                         },
                         complete: function () {
                             $btn.prop('disabled', false);
@@ -449,13 +454,15 @@ trait AdminVendorsTrait {
                 });
 
                 // Botão de refresh
-                $('#refresh-vendors-list').on('click', function () {
+                $(document).on('click', '#refresh-vendors-list', function () {
                     var $btn = $(this);
+                    $btn.prop('disabled', true);
                     $btn.find('i').addClass('fa-spin');
                     loadVendorsList();
                     setTimeout(function () {
                         $btn.find('i').removeClass('fa-spin');
-                    }, 1000);
+                        $btn.prop('disabled', false);
+                    }, 1500);
                 });
 
                 // Carrega vendedores ao iniciar
