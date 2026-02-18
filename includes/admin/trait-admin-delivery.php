@@ -36,6 +36,29 @@ trait AdminDeliveryTrait {
         wp_send_json_success(array('message' => 'Registros limpos com sucesso'));
     }
 
+    // AJAX: Confirmar entrega manualmente (sem login)
+    public function ajax_confirm_delivery()
+    {
+        global $hapvida_delivery_tracking;
+        if (!$hapvida_delivery_tracking) {
+            wp_send_json_error(array('message' => 'Delivery tracking não disponível'));
+            return;
+        }
+
+        $lead_id = isset($_POST['lead_id']) ? sanitize_text_field($_POST['lead_id']) : '';
+        if (empty($lead_id)) {
+            wp_send_json_error(array('message' => 'lead_id não fornecido'));
+            return;
+        }
+
+        $confirmed = $hapvida_delivery_tracking->manual_confirm_delivery($lead_id);
+        if ($confirmed) {
+            wp_send_json_success(array('message' => 'Entrega confirmada'));
+        } else {
+            wp_send_json_error(array('message' => 'Lead não encontrado ou já confirmado'));
+        }
+    }
+
     // AJAX: Toggle auto-deactivation setting (sem login)
     public function ajax_toggle_auto_deactivation()
     {
@@ -127,7 +150,7 @@ trait AdminDeliveryTrait {
 
                 var nowServer = Math.floor(Date.now() / 1000) + serverTimeDiff;
                 var html = '<div class="delivery-pending-list"><h3><i class="fas fa-hourglass-half"></i> Entregas aguardando confirmacao</h3>';
-                html += '<table class="delivery-table"><thead><tr><th>Vendedor</th><th>Grupo</th><th>Tempo restante</th><th>Status</th></tr></thead><tbody>';
+                html += '<table class="delivery-table"><thead><tr><th>Vendedor</th><th>Grupo</th><th>Tempo restante</th><th>Status</th><th></th></tr></thead><tbody>';
                 pendingData.forEach(function(p) {
                     var elapsed = nowServer - p.enviado_timestamp;
                     var remaining = Math.max(0, deliveryTimeout - elapsed);
@@ -135,7 +158,8 @@ trait AdminDeliveryTrait {
                     html += '<tr><td>' + p.vendedor + '</td>';
                     html += '<td><span class="grupo-badge">' + p.grupo.toUpperCase() + '</span></td>';
                     html += '<td class="countdown-cell">' + formatCountdown(remaining) + '</td>';
-                    html += '<td><span class="status-badge ' + info.cls + '">' + info.text + '</span></td></tr>';
+                    html += '<td><span class="status-badge ' + info.cls + '">' + info.text + '</span></td>';
+                    html += '<td><button class="confirm-delivery-btn" data-lead-id="' + p.lead_id + '" title="Confirmar que o vendedor recebeu"><i class="fas fa-check"></i></button></td></tr>';
                 });
                 html += '</tbody></table></div>';
                 container.innerHTML = html;
@@ -250,6 +274,34 @@ trait AdminDeliveryTrait {
                     if (!res.success) {
                         alert('Erro ao salvar configuracao');
                     }
+                });
+            });
+
+            // Confirmar entrega manualmente
+            document.addEventListener('click', function(e) {
+                var btn = e.target.closest('.confirm-delivery-btn');
+                if (!btn) return;
+                var leadId = btn.getAttribute('data-lead-id');
+                if (!leadId) return;
+                btn.disabled = true;
+                btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+                var formData = new FormData();
+                formData.append('action', 'confirm_delivery');
+                formData.append('lead_id', leadId);
+                fetch(ajaxUrl, { method: 'POST', body: formData })
+                .then(function(r) { return r.json(); })
+                .then(function(res) {
+                    if (res.success) {
+                        loadDeliveryStats();
+                    } else {
+                        btn.disabled = false;
+                        btn.innerHTML = '<i class="fas fa-check"></i>';
+                        alert('Erro: ' + (res.data && res.data.message ? res.data.message : 'Erro desconhecido'));
+                    }
+                })
+                .catch(function() {
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="fas fa-check"></i>';
                 });
             });
 
@@ -434,6 +486,26 @@ trait AdminDeliveryTrait {
             .delivery-pending-list h3 i,
             .delivery-deactivation-log h3 i {
                 margin-right: 6px;
+            }
+
+            .confirm-delivery-btn {
+                background: #dcfce7;
+                color: #166534;
+                border: 1px solid #bbf7d0;
+                border-radius: 8px;
+                padding: 4px 10px;
+                cursor: pointer;
+                font-size: 13px;
+                transition: all 0.2s;
+            }
+            .confirm-delivery-btn:hover {
+                background: #bbf7d0;
+                transform: translateY(-1px);
+            }
+            .confirm-delivery-btn:disabled {
+                opacity: 0.5;
+                cursor: not-allowed;
+                transform: none;
             }
 
             .control-btn.danger {

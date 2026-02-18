@@ -109,6 +109,9 @@ class Formulario_Hapvida_Admin
         add_action('wp_ajax_clear_delivery_records', array($this, 'ajax_clear_delivery_records'));
         add_action('wp_ajax_nopriv_clear_delivery_records', array($this, 'ajax_clear_delivery_records'));
 
+        add_action('wp_ajax_confirm_delivery', array($this, 'ajax_confirm_delivery'));
+        add_action('wp_ajax_nopriv_confirm_delivery', array($this, 'ajax_confirm_delivery'));
+
     }
 
 }

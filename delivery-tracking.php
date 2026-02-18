@@ -226,10 +226,9 @@ class Hapvida_Delivery_Tracking
             $event = strtolower(str_replace('_', '.', $request->get_param('event')));
         }
 
-        // Formato Evolution API (messages.update / MESSAGES_UPDATE / messages-update)
-        $is_messages_update = ($event === 'messages.update' || $event === 'messages-update');
-
-        if ($is_messages_update || isset($body['data'])) {
+        // Aceita qualquer evento da Evolution API que tenha dados úteis
+        // (messages.update, messages.upsert, send.message, etc.)
+        if ($event || isset($body['data'])) {
             $data = isset($body['data']) ? $body['data'] : array();
 
             // Evolution API v2 pode enviar array de updates
@@ -278,6 +277,18 @@ class Hapvida_Delivery_Tracking
                 $raw_update = strtoupper($data['update']['status']);
                 if (in_array($raw_update, array('SERVER_ACK', 'DELIVERY_ACK', 'READ', 'PLAYED'))) {
                     $status = 'delivered';
+                }
+            }
+
+            // Se o evento é send.message ou messages.upsert com fromMe=true,
+            // a mensagem foi enviada com sucesso - conta como entrega
+            if (!$status && $event) {
+                $is_send_event = (strpos($event, 'send') !== false || strpos($event, 'upsert') !== false);
+                $is_from_me = (isset($data['fromMe']) && $data['fromMe']) ||
+                              (isset($data['key']['fromMe']) && $data['key']['fromMe']);
+                if ($is_send_event && ($is_from_me || !isset($data['fromMe']))) {
+                    $status = 'delivered';
+                    error_log("HAPVIDA DELIVERY: Confirmado via evento de envio ({$event})");
                 }
             }
         }
@@ -346,12 +357,12 @@ class Hapvida_Delivery_Tracking
     }
 
     /**
-     * Confirma a entrega de uma mensagem
+     * Confirma a entrega de uma mensagem (público para permitir confirmação manual via AJAX)
      *
      * Usa transient como lock para evitar race condition quando
      * múltiplos webhooks chegam simultaneamente
      */
-    private function confirm_delivery($phone, $lead_id = null)
+    public function confirm_delivery($phone, $lead_id = null)
     {
         // Lock simples via transient para evitar race condition
         $lock_key = 'hapvida_delivery_lock';
@@ -737,6 +748,57 @@ class Hapvida_Delivery_Tracking
         $stats['inativacoes_recentes'] = array_slice(array_reverse($log), 0, 5);
 
         return $stats;
+    }
+
+    /**
+     * Confirma manualmente uma entrega pelo lead_id
+     * Usado pelo botão "Confirmar" no shortcode
+     */
+    public function manual_confirm_delivery($lead_id)
+    {
+        $pending = get_option(self::OPTION_PENDING, array());
+        $confirmed = false;
+
+        foreach ($pending as &$delivery) {
+            if ($delivery['status'] === 'pendente' && $delivery['lead_id'] === $lead_id) {
+                $delivery['status'] = 'entregue';
+                $delivery['confirmado_em'] = current_time('mysql');
+                $confirmed = true;
+                error_log("HAPVIDA DELIVERY: Confirmação MANUAL - Lead {$lead_id} para {$delivery['vendedor_nome']}");
+                break;
+            }
+        }
+
+        if ($confirmed) {
+            update_option(self::OPTION_PENDING, $pending);
+        }
+
+        return $confirmed;
+    }
+
+    /**
+     * Dispensa (remove) uma entrega pendente pelo lead_id
+     */
+    public function dismiss_delivery($lead_id)
+    {
+        $pending = get_option(self::OPTION_PENDING, array());
+        $dismissed = false;
+
+        foreach ($pending as &$delivery) {
+            if ($delivery['status'] === 'pendente' && $delivery['lead_id'] === $lead_id) {
+                $delivery['status'] = 'entregue'; // marca como entregue para não disparar inativação
+                $delivery['confirmado_em'] = current_time('mysql');
+                $dismissed = true;
+                error_log("HAPVIDA DELIVERY: Dispensado MANUAL - Lead {$lead_id}");
+                break;
+            }
+        }
+
+        if ($dismissed) {
+            update_option(self::OPTION_PENDING, $pending);
+        }
+
+        return $dismissed;
     }
 
     /**

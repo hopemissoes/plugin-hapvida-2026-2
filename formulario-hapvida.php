@@ -153,7 +153,7 @@ function get_formulario_hapvida_instance()
         $instance = new Formulario_Hapvida();
         $GLOBALS['formulario_hapvida'] = $instance;
         $initialized = true;
-        error_log("=== INSTÂNCIA ÚNICA DO FORMULÁRIO HAPVIDA CRIADA ===");
+        // Instância criada com sucesso
     }
 
     return $instance;
