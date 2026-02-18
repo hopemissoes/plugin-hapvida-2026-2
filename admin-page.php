@@ -107,6 +107,7 @@ class Formulario_Hapvida_Admin
         $stats['server_time'] = time();
         $stats['delivery_timeout'] = 7200;
         $stats['auto_deactivation_enabled'] = isset($settings['enable_auto_deactivation']) ? $settings['enable_auto_deactivation'] : '1';
+        $stats['is_horario_comercial'] = $hapvida_delivery_tracking->is_horario_comercial();
         wp_send_json_success($stats);
     }
 
@@ -2300,6 +2301,7 @@ class Formulario_Hapvida_Admin
             var serverTimeDiff = 0;
             var deliveryTimeout = 7200;
             var countdownInterval = null;
+            var isHorarioComercial = false;
 
             function formatCountdown(remainingSec) {
                 if (remainingSec <= 0) return '<span class="countdown-expired">EXPIRADO</span>';
@@ -2321,10 +2323,13 @@ class Formulario_Hapvida_Admin
 
             function renderPendingTable() {
                 var container = document.getElementById('delivery-pending-list-container');
-                if (!pendingData || pendingData.length === 0) {
+
+                // Fora do horario comercial: nao mostra pendentes
+                if (!isHorarioComercial || !pendingData || pendingData.length === 0) {
                     container.innerHTML = '';
                     return;
                 }
+
                 var nowServer = Math.floor(Date.now() / 1000) + serverTimeDiff;
                 var html = '<div class="delivery-pending-list"><h3><i class="fas fa-hourglass-half"></i> Entregas aguardando confirmacao</h3>';
                 html += '<table class="delivery-table"><thead><tr><th>Vendedor</th><th>Grupo</th><th>Tempo restante</th><th>Status</th></tr></thead><tbody>';
@@ -2343,7 +2348,9 @@ class Formulario_Hapvida_Admin
 
             function startCountdown() {
                 if (countdownInterval) clearInterval(countdownInterval);
-                countdownInterval = setInterval(renderPendingTable, 1000);
+                if (isHorarioComercial && pendingData.length > 0) {
+                    countdownInterval = setInterval(renderPendingTable, 1000);
+                }
             }
 
             function loadDeliveryStats() {
@@ -2363,17 +2370,32 @@ class Formulario_Hapvida_Admin
                     // Calcula diferenca entre tempo do servidor e do navegador
                     serverTimeDiff = d.server_time - Math.floor(Date.now() / 1000);
                     deliveryTimeout = d.delivery_timeout || 7200;
+                    isHorarioComercial = !!d.is_horario_comercial;
 
                     document.getElementById('delivery-pendentes').textContent = d.pendentes;
                     document.getElementById('delivery-entregues').textContent = d.entregues;
                     document.getElementById('delivery-expirados').textContent = d.expirados;
 
-                    // Toggle state
+                    // Toggle + horario comercial
                     var toggleEl = document.getElementById('toggle-auto-deactivation');
                     var labelEl = document.getElementById('auto-deactivation-label');
+                    var toggleContainer = document.querySelector('.auto-deactivation-toggle');
+
                     if (toggleEl) {
                         toggleEl.checked = (d.auto_deactivation_enabled === '1');
-                        if (labelEl) labelEl.textContent = toggleEl.checked ? 'Inativar auto' : 'Inativar auto (OFF)';
+                    }
+
+                    if (labelEl) {
+                        if (!isHorarioComercial) {
+                            labelEl.textContent = 'Fora do horario comercial';
+                            labelEl.style.color = '#94a3b8';
+                        } else if (toggleEl && !toggleEl.checked) {
+                            labelEl.textContent = 'Inativar auto (OFF)';
+                            labelEl.style.color = '#ef4444';
+                        } else {
+                            labelEl.textContent = 'Inativar auto';
+                            labelEl.style.color = '#475569';
+                        }
                     }
 
                     // Guarda dados e renderiza com countdown
@@ -2381,7 +2403,7 @@ class Formulario_Hapvida_Admin
                     renderPendingTable();
                     startCountdown();
 
-                    // Renderiza log de inativacoes
+                    // Renderiza log de inativacoes (sempre mostra, independente do horario)
                     var logHtml = '';
                     if (d.inativacoes_recentes && d.inativacoes_recentes.length > 0) {
                         logHtml = '<div class="delivery-deactivation-log"><h3><i class="fas fa-ban"></i> Inativacoes automaticas recentes</h3>';
@@ -2405,7 +2427,15 @@ class Formulario_Hapvida_Admin
             document.getElementById('toggle-auto-deactivation').addEventListener('change', function() {
                 var enabled = this.checked ? '1' : '0';
                 var labelEl = document.getElementById('auto-deactivation-label');
-                if (labelEl) labelEl.textContent = this.checked ? 'Inativar auto' : 'Inativar auto (OFF)';
+                if (labelEl) {
+                    if (this.checked) {
+                        labelEl.textContent = 'Inativar auto';
+                        labelEl.style.color = '#475569';
+                    } else {
+                        labelEl.textContent = 'Inativar auto (OFF)';
+                        labelEl.style.color = '#ef4444';
+                    }
+                }
 
                 var formData = new FormData();
                 formData.append('action', 'toggle_auto_deactivation');

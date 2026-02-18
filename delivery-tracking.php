@@ -310,6 +310,8 @@ class Hapvida_Delivery_Tracking
         $pending = get_option(self::OPTION_PENDING, array());
         $confirmed = false;
 
+        error_log("HAPVIDA DELIVERY: Tentando confirmar entrega - webhook_phone={$phone}, lead_id=" . ($lead_id ?: 'N/A'));
+
         foreach ($pending as &$delivery) {
             if ($delivery['status'] !== 'pendente') {
                 continue;
@@ -319,8 +321,12 @@ class Hapvida_Delivery_Tracking
             $match = false;
             if ($lead_id && $delivery['lead_id'] === $lead_id) {
                 $match = true;
+                error_log("HAPVIDA DELIVERY: Match por lead_id - {$lead_id}");
             } elseif ($this->phones_match($delivery['vendedor_telefone'], $phone)) {
                 $match = true;
+                error_log("HAPVIDA DELIVERY: Match por telefone - vendedor={$delivery['vendedor_telefone']}, webhook={$phone}");
+            } else {
+                error_log("HAPVIDA DELIVERY: SEM match - vendedor={$delivery['vendedor_telefone']}, webhook={$phone}, lead={$delivery['lead_id']}");
             }
 
             if ($match) {
@@ -341,6 +347,8 @@ class Hapvida_Delivery_Tracking
 
         if ($confirmed) {
             update_option(self::OPTION_PENDING, $pending);
+        } else {
+            error_log("HAPVIDA DELIVERY: NENHUM match encontrado para phone={$phone}. Pendentes: " . count(array_filter($pending, function($d) { return $d['status'] === 'pendente'; })));
         }
 
         return $confirmed;
@@ -353,7 +361,7 @@ class Hapvida_Delivery_Tracking
     /**
      * Verifica se está em horário comercial (8h às 18h, seg-sex)
      */
-    private function is_horario_comercial()
+    public function is_horario_comercial()
     {
         $current_hour = intval(current_time('H'));
         $current_day = intval(current_time('N')); // 1=seg, 7=dom
@@ -580,11 +588,22 @@ class Hapvida_Delivery_Tracking
         }
 
         // Tenta sem o 9 extra (celulares BR)
-        // Ex: 5511999999999 vs 551199999999
+        // Ex: 5583999471031 (13 dig) vs 558399471031 (12 dig)
         $shorter1 = strlen($p1) === 13 ? substr($p1, 0, 4) . substr($p1, 5) : $p1;
         $shorter2 = strlen($p2) === 13 ? substr($p2, 0, 4) . substr($p2, 5) : $p2;
 
-        return $shorter1 === $shorter2 || $p1 === $shorter2 || $shorter1 === $p2;
+        if ($shorter1 === $shorter2 || $p1 === $shorter2 || $shorter1 === $p2) {
+            return true;
+        }
+
+        // Fallback: compara últimos 8 dígitos (número local sem DDD/DDI/9)
+        $last8_p1 = substr($p1, -8);
+        $last8_p2 = substr($p2, -8);
+        if (strlen($p1) >= 10 && strlen($p2) >= 10 && $last8_p1 === $last8_p2) {
+            return true;
+        }
+
+        return false;
     }
 
     /**
@@ -635,7 +654,8 @@ class Hapvida_Delivery_Tracking
                         'grupo' => $delivery['grupo'],
                         'minutos' => $elapsed_min,
                         'lead_id' => $delivery['lead_id'],
-                        'enviado_timestamp' => $delivery['enviado_timestamp']
+                        'enviado_timestamp' => $delivery['enviado_timestamp'],
+                        'vendedor_telefone' => $delivery['vendedor_telefone']
                     );
                     break;
                 case 'entregue':
