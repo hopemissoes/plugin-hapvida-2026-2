@@ -341,6 +341,17 @@ class Hapvida_Delivery_Tracking
         if ($status === 'delivered') {
             $confirmed = $this->confirm_delivery($phone, $lead_id);
 
+            // Salva resultado do processamento para diagnóstico no shortcode
+            $this->save_processing_result(array(
+                'timestamp' => current_time('mysql'),
+                'phone' => $phone,
+                'lead_id' => $lead_id,
+                'event' => $event,
+                'status_raw' => $status,
+                'confirmed' => $confirmed,
+                'message' => $confirmed ? 'Entrega confirmada' : 'SEM MATCH - nenhuma entrega pendente para este telefone'
+            ));
+
             return new WP_REST_Response(array(
                 'success' => $confirmed,
                 'message' => $confirmed ? 'Entrega confirmada' : 'Nenhuma entrega pendente encontrada para este número',
@@ -349,6 +360,16 @@ class Hapvida_Delivery_Tracking
         }
 
         // Status não é de entrega - apenas registra
+        $this->save_processing_result(array(
+            'timestamp' => current_time('mysql'),
+            'phone' => $phone,
+            'lead_id' => $lead_id,
+            'event' => $event,
+            'status_raw' => $status,
+            'confirmed' => false,
+            'message' => 'Status nao reconhecido como entrega'
+        ));
+
         return new WP_REST_Response(array(
             'success' => true,
             'message' => 'Webhook recebido (status não é de entrega)',
@@ -379,12 +400,16 @@ class Hapvida_Delivery_Tracking
         $pending = get_option(self::OPTION_PENDING, array());
         $confirmed = false;
 
-        error_log("HAPVIDA DELIVERY: Tentando confirmar entrega - webhook_phone={$phone}, lead_id=" . ($lead_id ?: 'N/A'));
+        $total_pending = count(array_filter($pending, function($d) { return $d['status'] === 'pendente'; }));
+        error_log("HAPVIDA DELIVERY: Tentando confirmar entrega - webhook_phone={$phone}, lead_id=" . ($lead_id ?: 'N/A') . ", total_pendentes={$total_pending}");
 
         foreach ($pending as &$delivery) {
             if ($delivery['status'] !== 'pendente') {
                 continue;
             }
+
+            // Log detalhado da comparação para diagnóstico
+            error_log("HAPVIDA DELIVERY: Comparando - vendedor={$delivery['vendedor_nome']}, vendedor_tel={$delivery['vendedor_telefone']}, webhook_tel={$phone}, lead={$delivery['lead_id']}");
 
             // Verifica por lead_id (mais preciso) ou telefone
             $match = false;
@@ -394,6 +419,8 @@ class Hapvida_Delivery_Tracking
             } elseif ($this->phones_match($delivery['vendedor_telefone'], $phone)) {
                 $match = true;
                 error_log("HAPVIDA DELIVERY: Match por telefone - vendedor={$delivery['vendedor_telefone']}, webhook={$phone}");
+            } else {
+                error_log("HAPVIDA DELIVERY: SEM match - vendedor_norm=" . $this->normalize_phone($delivery['vendedor_telefone']) . ", webhook_norm=" . $this->normalize_phone($phone));
             }
 
             if ($match) {
@@ -748,6 +775,28 @@ class Hapvida_Delivery_Tracking
         $stats['inativacoes_recentes'] = array_slice(array_reverse($log), 0, 5);
 
         return $stats;
+    }
+
+    /**
+     * Salva resultado do processamento de webhook para diagnóstico
+     */
+    private function save_processing_result($result)
+    {
+        $results = get_option('hapvida_webhook_processing_results', array());
+        array_unshift($results, $result);
+        if (count($results) > 10) {
+            $results = array_slice($results, 0, 10);
+        }
+        update_option('hapvida_webhook_processing_results', $results);
+    }
+
+    /**
+     * Retorna últimos resultados de processamento de webhook
+     */
+    public function get_last_processing_results($limit = 5)
+    {
+        $results = get_option('hapvida_webhook_processing_results', array());
+        return array_slice($results, 0, $limit);
     }
 
     /**

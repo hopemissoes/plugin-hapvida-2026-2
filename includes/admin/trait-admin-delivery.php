@@ -18,6 +18,8 @@ trait AdminDeliveryTrait {
         $stats['delivery_timeout'] = 7200;
         $stats['auto_deactivation_enabled'] = isset($settings['enable_auto_deactivation']) ? $settings['enable_auto_deactivation'] : '1';
         $stats['is_horario_comercial'] = $hapvida_delivery_tracking->is_horario_comercial();
+        $stats['webhook_results'] = $hapvida_delivery_tracking->get_last_processing_results(5);
+        $stats['total_webhooks_received'] = count(get_option('hapvida_webhook_debug_log', array()));
         wp_send_json_success($stats);
     }
 
@@ -111,6 +113,7 @@ trait AdminDeliveryTrait {
 
         <div id="delivery-pending-list-container"></div>
         <div id="delivery-deactivation-log-container"></div>
+        <div id="delivery-webhook-diagnostic"></div>
 
         <script>
         (function() {
@@ -242,6 +245,32 @@ trait AdminDeliveryTrait {
                         logHtml += '</tbody></table></div>';
                     }
                     document.getElementById('delivery-deactivation-log-container').innerHTML = logHtml;
+
+                    // Diagnóstico de webhooks da Evolution API
+                    var diagHtml = '';
+                    var totalWh = d.total_webhooks_received || 0;
+                    var results = d.webhook_results || [];
+                    diagHtml = '<div class="webhook-diagnostic">';
+                    diagHtml += '<h3><i class="fas fa-stethoscope"></i> Diagnostico Evolution API</h3>';
+                    if (totalWh === 0) {
+                        diagHtml += '<div class="diag-alert diag-warn"><i class="fas fa-exclamation-triangle"></i> Nenhum webhook recebido da Evolution API. Verifique se a URL <code>/wp-json/formulario-hapvida/v1/evolution-webhook</code> esta configurada na Evolution API.</div>';
+                    } else {
+                        diagHtml += '<div class="diag-alert diag-ok"><i class="fas fa-check-circle"></i> ' + totalWh + ' webhook(s) recebido(s) da Evolution API</div>';
+                    }
+                    if (results.length > 0) {
+                        diagHtml += '<table class="delivery-table diag-table"><thead><tr><th>Quando</th><th>Telefone</th><th>Evento</th><th>Resultado</th></tr></thead><tbody>';
+                        results.forEach(function(r) {
+                            var cls = r.confirmed ? 'diag-row-ok' : 'diag-row-fail';
+                            diagHtml += '<tr class="' + cls + '">';
+                            diagHtml += '<td>' + r.timestamp + '</td>';
+                            diagHtml += '<td><code>' + (r.phone || '-') + '</code></td>';
+                            diagHtml += '<td>' + (r.event || '-') + '</td>';
+                            diagHtml += '<td>' + r.message + '</td></tr>';
+                        });
+                        diagHtml += '</tbody></table>';
+                    }
+                    diagHtml += '</div>';
+                    document.getElementById('delivery-webhook-diagnostic').innerHTML = diagHtml;
                 })
                 .catch(function() {
                     if (btn) {
@@ -518,6 +547,21 @@ trait AdminDeliveryTrait {
                 background: #fecaca;
                 transform: translateY(-2px);
             }
+
+            .webhook-diagnostic { margin-top: 20px; }
+            .webhook-diagnostic h3 { font-size: 15px; color: #475569; margin-bottom: 10px; }
+            .webhook-diagnostic h3 i { margin-right: 6px; }
+            .diag-alert {
+                padding: 10px 14px; border-radius: 8px; font-size: 13px; margin-bottom: 12px;
+                display: flex; align-items: center; gap: 8px;
+            }
+            .diag-alert code { background: rgba(0,0,0,0.06); padding: 2px 6px; border-radius: 4px; font-size: 11px; }
+            .diag-warn { background: #fef3c7; color: #92400e; border: 1px solid #fde68a; }
+            .diag-ok { background: #dcfce7; color: #166534; border: 1px solid #bbf7d0; }
+            .diag-table { font-size: 12px; }
+            .diag-table code { background: #f1f5f9; padding: 1px 5px; border-radius: 3px; font-size: 11px; }
+            .diag-row-ok td { background: #f0fdf4; }
+            .diag-row-fail td { background: #fef2f2; }
 
             @media (max-width: 600px) {
                 .delivery-header-actions { flex-direction: column; gap: 10px; align-items: flex-end; }
