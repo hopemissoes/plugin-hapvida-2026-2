@@ -97,22 +97,12 @@ class Formulario_Hapvida
         add_action('wp_ajax_get_pending_webhooks', array($this, 'ajax_get_pending_webhooks'));
         add_action('wp_ajax_nopriv_get_pending_webhooks', array($this, 'ajax_get_pending_webhooks'));
 
-        add_action('wp_ajax_retry_webhook_frontend', array($this, 'ajax_retry_webhook_frontend'));
-        add_action('wp_ajax_nopriv_retry_webhook_frontend', array($this, 'ajax_retry_webhook_frontend'));
-
         add_action('admin_init', array($this, 'handle_admin_debug_actions'));
-
-        add_action('hapvida_send_webhook_background', array($this, 'process_webhook_background'), 10, 2);
 
         add_shortcode('hapvida_dashboard', array($this, 'render_dashboard_shortcode'));
         add_shortcode('contagem_hapvida', array($this, 'render_dashboard_shortcode')); // Alias para compatibilidade
 
         add_action('rest_api_init', array($this, 'register_rest_routes'));
-
-
-        add_action('hapvida_process_webhook_queue', array($this, 'process_webhook_queue_async'));
-        add_action('wp_ajax_hapvida_process_webhook_queue_async', array($this, 'process_webhook_queue_async'));
-        add_action('wp_ajax_nopriv_hapvida_process_webhook_queue_async', array($this, 'process_webhook_queue_async'));
 
         // *** AUTO-ATIVAÇÃO Seu Souza: Cron hook ***
         add_action('hapvida_auto_activate_seu_souza', array($this, 'auto_activate_seu_souza'));
@@ -294,24 +284,6 @@ class Formulario_Hapvida
             'monthly_count' => $monthly_submissions[$current_month] ?? 0
         ), 200);
     }
-
-    // VERSÃO SIMPLIFICADA
-    private function send_to_webhook_with_tracking($form_data, $vendedor)
-    {
-        try {
-            // Prepara dados do webhook
-            $webhook_data = $this->prepare_webhook_data($form_data, $vendedor);
-
-            // Em vez de enviar diretamente, enfileira
-            $this->save_webhook_entry($webhook_data, 'pending', 'Aguardando processamento');
-            return true; // Sempre retorna true pois foi enfileirado
-
-        } catch (Exception $e) {
-            $this->log("âš ï¸ Erro no tracking: " . $e->getMessage());
-            return false;
-        }
-    }
-
     public function render_dashboard_shortcode($atts)
     {
         // Instancia a classe admin se não existir
@@ -420,10 +392,8 @@ class Formulario_Hapvida
 
         $webhook_configs = array(
             'webhook_url_drv' => 'DRV - Primeiro Envio',
-            'webhook_url_drv_redistribution' => 'DRV - Redistribuição',
             'webhook_url_drv_confirmation' => 'DRV - Confirmação',
             'webhook_url_seu_souza' => 'Seu Souza - Primeiro Envio',
-            'webhook_url_seu_souza_redistribution' => 'Seu Souza - Redistribuição',
             'webhook_url_seu_souza_confirmation' => 'Seu Souza - Confirmação'
         );
 
@@ -447,13 +417,12 @@ class Formulario_Hapvida
 
         // Valida configurações obrigatórias
         $required_drv = isset($options['webhook_url_drv']) && !empty(trim($options['webhook_url_drv']));
-        $required_redistribution_drv = isset($options['webhook_url_drv_redistribution']) && !empty(trim($options['webhook_url_drv_redistribution']));
 
-        if (!$required_drv && !$required_redistribution_drv) {
+        if (!$required_drv) {
             $debug_info .= "âŒ ERRO CRÃTICO: Nenhuma URL de webhook configurada para DRV!\n";
             $debug_info .= "   É necessário configurar pelo menos uma URL para o grupo DRV.\n";
         } else {
-            $debug_info .= "✅ Configurações básicas OK para redistribuição DRV\n";
+            $debug_info .= "✅ Configurações básicas OK para DRV\n";
         }
 
         wp_send_json_success(array('validation_info' => $debug_info));
@@ -504,28 +473,20 @@ class Formulario_Hapvida
         $debug_info .= "ðŸ”§ CONFIGURAÇÃ•ES DE WEBHOOK:\n";
 
         if ($grupo === 'drv') {
-            $webhook_url = isset($options['webhook_url_drv_redistribution']) ?
-                $options['webhook_url_drv_redistribution'] :
-                (isset($options['webhook_url_drv']) ? $options['webhook_url_drv'] : '');
+            $webhook_url = isset($options['webhook_url_drv']) ? $options['webhook_url_drv'] : '';
 
-            $debug_info .= "   - URL DRV Redistribuição: " . (isset($options['webhook_url_drv_redistribution']) ?
-                substr($options['webhook_url_drv_redistribution'], 0, 50) . "..." : 'NÃO CONFIGURADO') . "\n";
-            $debug_info .= "   - URL DRV Principal: " . (isset($options['webhook_url_drv']) ?
+            $debug_info .= "   - URL DRV: " . (isset($options['webhook_url_drv']) ?
                 substr($options['webhook_url_drv'], 0, 50) . "..." : 'NÃO CONFIGURADO') . "\n";
 
         } elseif ($grupo === 'seu_souza') {
-            $webhook_url = isset($options['webhook_url_seu_souza_redistribution']) ?
-                $options['webhook_url_seu_souza_redistribution'] :
-                (isset($options['webhook_url_seu_souza']) ? $options['webhook_url_seu_souza'] : '');
+            $webhook_url = isset($options['webhook_url_seu_souza']) ? $options['webhook_url_seu_souza'] : '';
 
-            $debug_info .= "   - URL Seu Souza Redistribuição: " . (isset($options['webhook_url_seu_souza_redistribution']) ?
-                substr($options['webhook_url_seu_souza_redistribution'], 0, 50) . "..." : 'NÃO CONFIGURADO') . "\n";
-            $debug_info .= "   - URL Seu Souza Principal: " . (isset($options['webhook_url_seu_souza']) ?
+            $debug_info .= "   - URL Seu Souza: " . (isset($options['webhook_url_seu_souza']) ?
                 substr($options['webhook_url_seu_souza'], 0, 50) . "..." : 'NÃO CONFIGURADO') . "\n";
         }
 
         if (!empty($webhook_url)) {
-            $debug_info .= "\n✅ URL de webhook encontrada para redistribuição\n";
+            $debug_info .= "\n✅ URL de webhook encontrada\n";
             $debug_info .= "🔍 URL que será usada: " . substr($webhook_url, 0, 50) . "...\n";
         } else {
             $debug_info .= "\nâŒ ERRO: Nenhuma URL de webhook configurada para grupo {$grupo}\n";
@@ -875,8 +836,6 @@ class Formulario_Hapvida
             // *** PROCESSAMENTO DO WEBHOOK - VERSÃO OTIMIZADA ***
             $options = get_option($this->settings_option_name);
             $is_business_hours = $this->is_horario_comercial();
-            $enable_redistributions = isset($options['enable_lead_redistribution']) &&
-                $options['enable_lead_redistribution'] === 'yes';
 
             // Tenta enviar webhook com timeout reduzido
             $webhook_success = false;
@@ -993,7 +952,7 @@ class Formulario_Hapvida
                 'whatsapp_url' => $whatsapp_url, // *** ADICIONA APENAS ESTA LINHA EXTRA ***
                 'webhook_status' => $webhook_success ? 'sent_async' : 'queued_for_retry',
                 'business_hours' => $is_business_hours,
-                'tracking_enabled' => $enable_redistributions && $is_business_hours,
+                'tracking_enabled' => false,
                 'vendor_info' => array(
                     'name' => $vendedor['nome'],
                     'group' => $vendedor['grupo'],
@@ -1017,11 +976,6 @@ class Formulario_Hapvida
         } catch (Exception $e) {
             error_log("HAPVIDA ERROR: " . $e->getMessage());
             $this->log("âŒ ERRO: " . $e->getMessage());
-
-            // Em caso de erro, remove a marcação de processado
-            if (isset($form_data)) {
-                $this->unmark_form_as_processed($form_data);
-            }
 
             return new WP_REST_Response(array(
                 'success' => false,
@@ -1148,385 +1102,6 @@ class Formulario_Hapvida
         // Retorna o telefone original se não se encaixa em nenhum formato
         return $phone;
     }
-
-    private function enqueue_webhook_for_async_processing($form_data, $vendedor)
-    {
-        try {
-            // Prepara dados para o webhook
-            $webhook_data = array(
-                'form_data' => $form_data,
-                'vendedor' => $vendedor,
-                'timestamp' => current_time('timestamp'),
-                'priority' => 'high'
-            );
-
-            // Salva na fila para processamento imediato
-            $queue = get_option('hapvida_webhook_queue', array());
-            array_unshift($queue, $webhook_data); // Adiciona no início para processar primeiro
-
-            // Limita a fila a 500 itens para evitar crescimento excessivo
-            if (count($queue) > 500) {
-                $queue = array_slice($queue, 0, 500);
-            }
-
-            update_option('hapvida_webhook_queue', $queue);
-
-            // Agenda processamento imediato via WP-Cron
-            if (!wp_next_scheduled('hapvida_process_webhook_queue')) {
-                wp_schedule_single_event(time(), 'hapvida_process_webhook_queue');
-            }
-
-            // Tenta processar via requisição não-bloqueante
-            $this->trigger_async_webhook_processing();
-
-            $this->log("ðŸ“‹ Webhook enfileirado para processamento assíncrono - Lead ID: " . $form_data['lead_id']);
-
-        } catch (Exception $e) {
-            $this->log("âš ï¸ Erro ao enfileirar webhook, tentando envio direto: " . $e->getMessage());
-            // Em caso de erro, tenta envio direto com timeout reduzido
-            $this->send_webhook_with_reduced_timeout($form_data, $vendedor);
-        }
-    }
-
-    /**
-     * Envia webhook com timeout reduzido para casos de emergência
-     */
-    private function send_webhook_with_reduced_timeout($form_data, $vendedor)
-    {
-        $options = get_option($this->settings_option_name);
-        $grupo = isset($vendedor['grupo']) ? $vendedor['grupo'] : 'drv';
-
-        if ($grupo === 'drv') {
-            $webhook_url = isset($options['webhook_url_drv']) ? $options['webhook_url_drv'] : '';
-        } else {
-            $webhook_url = isset($options['webhook_url_seu_souza']) ? $options['webhook_url_seu_souza'] : '';
-        }
-
-        if (empty($webhook_url)) {
-            return false;
-        }
-
-        // Prepara dados mínimos
-        $webhook_data = $this->prepare_webhook_data($form_data, $vendedor);
-
-        // Configuração ultra-rápida
-        $quick_config = array(
-            'timeout' => 3, // Apenas 3 segundos
-            'blocking' => false, // Não bloqueia
-            'body' => json_encode($webhook_data),
-            'headers' => array('Content-Type' => 'application/json'),
-            'sslverify' => false
-        );
-
-        wp_remote_post($webhook_url, $quick_config);
-
-        // Salva para retry posterior se necessário
-        $this->save_webhook_entry($webhook_data, 'pending', 'Enviado com timeout reduzido');
-
-        return true;
-    }
-
-    /**
-     * Dispara processamento assíncrono de webhooks
-     */
-    private function trigger_async_webhook_processing()
-    {
-        $url = admin_url('admin-ajax.php');
-        $args = array(
-            'timeout' => 0.01,
-            'blocking' => false,
-            'body' => array(
-                'action' => 'hapvida_process_webhook_queue_async',
-                'security' => wp_create_nonce('hapvida_async_webhook')
-            ),
-            'cookies' => $_COOKIE,
-            'sslverify' => false
-        );
-
-        wp_remote_post($url, $args);
-    }
-
-    private function is_form_already_submitted_fast($form_data)
-    {
-        $telefone = isset($form_data['telefone']) ? $form_data['telefone'] : '';
-        if (empty($telefone))
-            return false;
-
-        $telefone_clean = preg_replace('/[^0-9]/', '', $telefone);
-        if (empty($telefone_clean))
-            return false;
-
-        // Usa a mesma chave que a versão principal para consistência
-        $processed_key = 'processed_phone_' . md5($telefone_clean);
-
-        // Primeiro verifica no cache de memória (mais rápido)
-        $cache_key = 'hapvida_' . $processed_key;
-        $cached = wp_cache_get($cache_key, 'hapvida_submissions');
-
-        if ($cached !== false) {
-            $elapsed = time() - $cached;
-            if ($elapsed < 180) { // 3 minutos
-                $this->log("âš ï¸ [CACHE] Telefone {$telefone} já processado (cache)");
-                return true;
-            }
-        }
-
-        // Se não encontrou no cache, verifica no transient
-        $transient = get_transient($processed_key);
-        if ($transient) {
-            // Adiciona ao cache para próximas verificações
-            wp_cache_set($cache_key, $transient, 'hapvida_submissions', 180);
-            $this->log("âš ï¸ [TRANSIENT] Telefone {$telefone} já processado (transient)");
-            return true;
-        }
-
-        return false;
-    }
-
-    // ==================================================================
-// 3. MARCA SUBMISSÃO EM CACHE RÃPIDO
-// ==================================================================
-    private function mark_form_as_processed_fast($form_data)
-    {
-        $telefone = isset($form_data['telefone']) ? $form_data['telefone'] : '';
-        if (!empty($telefone)) {
-            $telefone_clean = preg_replace('/[^0-9]/', '', $telefone);
-
-            if (!empty($telefone_clean)) {
-                $processed_key = 'processed_phone_' . md5($telefone_clean);
-                $cache_key = 'hapvida_' . $processed_key;
-                $current_time = time();
-
-                // Salva em cache de memória (mais rápido)
-                wp_cache_set($cache_key, $current_time, 'hapvida_submissions', 180);
-
-                // IMPORTANTE: Também salva em transient para persistência
-                set_transient($processed_key, $current_time, 180);
-
-                $this->log("✅ [FAST] Telefone {$telefone} marcado como processado (cache + transient)");
-            }
-        }
-    }
-
-    // ==================================================================
-// 4. VALIDAÇÃO OTIMIZADA
-// ==================================================================
-    private function validate_required_fields_fast($form_data)
-    {
-        // Validação apenas dos campos essenciais
-        if (empty($form_data['name']) || strlen(trim($form_data['name'])) < 3) {
-            return array('valid' => false, 'message' => 'Por favor, informe seu nome completo.');
-        }
-
-        if (empty($form_data['telefone'])) {
-            return array('valid' => false, 'message' => 'Por favor, informe seu WhatsApp.');
-        }
-
-        // Validação básica do telefone
-        $phone_clean = preg_replace('/[^0-9]/', '', $form_data['telefone']);
-        if (strlen($phone_clean) < 10 || strlen($phone_clean) > 11) {
-            return array('valid' => false, 'message' => 'Número de WhatsApp inválido.');
-        }
-
-        return array('valid' => true);
-    }
-
-    // ==================================================================
-// 5. GERA URL WHATSAPP OTIMIZADA
-// ==================================================================
-    private function generate_whatsapp_url_optimized($vendedor_telefone, $form_data)
-    {
-        // Remove caracteres não numéricos
-        $telefone_clean = preg_replace('/[^0-9]/', '', $vendedor_telefone);
-
-        // Adiciona código do Brasil se necessário
-        if (strlen($telefone_clean) === 10 || strlen($telefone_clean) === 11) {
-            $telefone_clean = '55' . $telefone_clean;
-        }
-
-        // Monta mensagem simplificada
-        $nome = $form_data['name'] ?? '';
-        $cidade = $form_data['cidade'] ?? '';
-        $plano = $form_data['qual_plano'] ?? '';
-        $qtd = $form_data['qtd_pessoas'] ?? '1';
-
-        // Processa idades
-        $idades = '';
-        if (isset($form_data['ages'])) {
-            $idades = is_array($form_data['ages'])
-                ? implode(', ', $form_data['ages'])
-                : $form_data['ages'];
-        }
-
-        // Mensagem formatada
-        $mensagem = "Olá, meu nome é *{$nome}*, gostaria de uma cotação para:\n\n";
-        $mensagem .= "*Cidade:* {$cidade}\n";
-        $mensagem .= "*Quantidade:* {$qtd} pessoa(s)\n";
-        $mensagem .= "*Plano:* {$plano}\n";
-        if (!empty($idades)) {
-            $mensagem .= "*Idades:* {$idades}\n";
-        }
-
-        // Codifica e retorna URL
-        return "https://wa.me/{$telefone_clean}?text=" . urlencode($mensagem);
-    }
-
-    // ==================================================================
-// 6. WEBHOOK ASSÃNCRONO (NÃO BLOQUEIA)
-// ==================================================================
-    private function schedule_webhook_async($form_data, $vendedor)
-    {
-        // Agenda para execução imediata em background
-        wp_schedule_single_event(time(), 'hapvida_send_webhook_background', array($form_data, $vendedor));
-
-        // Alternativa: usar wp_remote_post com blocking => false
-        $this->send_webhook_non_blocking($form_data, $vendedor);
-    }
-
-    private function send_webhook_non_blocking($form_data, $vendedor)
-    {
-        $options = get_option($this->settings_option_name);
-        $grupo = strtolower($vendedor['grupo']);
-
-        // Determina URL do webhook
-        $webhook_url = '';
-        if ($grupo === 'drv') {
-            $webhook_url = $options['webhook_url_drv'] ?? '';
-        } elseif ($grupo === 'seu_souza') {
-            $webhook_url = $options['webhook_url_seu_souza'] ?? '';
-        }
-
-        if (empty($webhook_url)) {
-            return;
-        }
-
-        // Verifica se foi roteamento por URL específica
-        $roteamento_url = false;
-        $pagina_origem = $form_data['pagina_origem'] ?? '';
-        if (!empty($pagina_origem)) {
-            $vendedor_por_url = $this->get_vendedor_por_url($pagina_origem);
-            if ($vendedor_por_url) {
-                $roteamento_url = true;
-            }
-        }
-
-        // Prepara dados do webhook - CORREÇÃO: Incluindo ID e telefone do vendedor
-        $webhook_data = array(
-            'lead_id' => $form_data['lead_id'] ?? $this->generate_unique_lead_id(),
-            'nome' => $form_data['name'] ?? '',
-            'telefone' => $form_data['telefone'] ?? '',
-            'cidade' => $form_data['cidade'] ?? '',
-            'tipo_de_plano' => $form_data['qual_plano'] ?? '',
-            'quantidade_de_pessoas' => $form_data['qtd_pessoas'] ?? 1,
-            'idades' => is_array($form_data['ages']) ? implode(', ', $form_data['ages']) : ($form_data['ages'] ?? 'N/A'),
-            'grupo' => strtoupper($grupo),
-            'atendente' => $vendedor['nome'] ?? '',
-
-            // CORREÇÃO: Adicionando ID e telefone do vendedor
-            'telefone_vendedor' => $vendedor['telefone'] ?? 'N/A',
-            'vendedor_telefone' => $vendedor['telefone'] ?? 'N/A',
-            'vendedor_nome' => $vendedor['nome'] ?? 'N/A',
-            'vendedor_id' => $vendedor['vendedor_id'] ?? '', // NOVO CAMPO
-
-            // *** NOVO: Adiciona informações sobre roteamento específico ***
-            'roteamento_especifico' => $roteamento_url ? 'sim' : 'nao',
-            'tipo_roteamento' => $roteamento_url ? 'url_consultor' : 'round_robin',
-            'url_origem' => $pagina_origem,
-
-            'data_envio' => date('d-m-Y'),
-            'hora_submissao' => date('H:i:s'),
-            'ip' => $form_data['ip'] ?? '',
-
-            // Adiciona contagens diárias e mensais
-            'contagem_diaria' => $this->get_today_submission_count(),
-            'contagem_mensal' => $this->get_monthly_submission_count(),
-            'pagina_origem' => $form_data['pagina_origem'] ?? home_url()
-        );
-
-        // Envia webhook sem bloquear (não aguarda resposta)
-        wp_remote_post($webhook_url, array(
-            'body' => json_encode($webhook_data),
-            'headers' => array('Content-Type' => 'application/json'),
-            'timeout' => 0.01, // Timeout mínimo
-            'blocking' => false, // NÃO BLOQUEIA
-            'sslverify' => false
-        ));
-
-        // Log assíncrono
-        $this->log("ðŸš€ Webhook disparado em background para {$grupo} - ID vendedor: " . ($vendedor['vendedor_id'] ?? 'N/A'));
-    }
-
-    // ==================================================================
-// 8. FUNÇÃO PARA PROCESSAR WEBHOOK EM BACKGROUND
-// ==================================================================
-    public function process_webhook_background($form_data, $vendedor)
-    {
-        $options = get_option($this->settings_option_name);
-        $grupo = strtolower($vendedor['grupo']);
-
-        // Determina URL do webhook
-        $webhook_url = '';
-        if ($grupo === 'drv') {
-            $webhook_url = $options['webhook_url_drv'] ?? '';
-        } elseif ($grupo === 'seu_souza') {
-            $webhook_url = $options['webhook_url_seu_souza'] ?? '';
-        }
-
-        if (empty($webhook_url)) {
-            return;
-        }
-
-        // Prepara dados
-        $webhook_data = array(
-            'lead_id' => $form_data['lead_id'],
-            'nome' => $form_data['name'],
-            'telefone' => $form_data['telefone'],
-            'cidade' => $form_data['cidade'] ?? '',
-            'plano' => $form_data['qual_plano'] ?? '',
-            'qtd_pessoas' => $form_data['qtd_pessoas'] ?? 1,
-            'ages' => $form_data['ages'] ?? array(),
-            'grupo' => strtoupper($grupo),
-            'atendente' => $vendedor['nome'],
-            'data' => $form_data['data'],
-            'ip' => $form_data['ip']
-        );
-
-        // Tenta enviar com retry
-        $max_attempts = 3;
-        $attempt = 0;
-        $success = false;
-
-        while ($attempt < $max_attempts && !$success) {
-            $attempt++;
-
-            $response = wp_remote_post($webhook_url, array(
-                'body' => json_encode($webhook_data),
-                'headers' => array('Content-Type' => 'application/json'),
-                'timeout' => 10,
-                'blocking' => true,
-                'sslverify' => false
-            ));
-
-            if (!is_wp_error($response)) {
-                $code = wp_remote_retrieve_response_code($response);
-                if ($code >= 200 && $code < 300) {
-                    $success = true;
-                    $this->log("✅ Webhook enviado com sucesso (tentativa {$attempt})");
-                }
-            }
-
-            if (!$success && $attempt < $max_attempts) {
-                sleep(2); // Aguarda 2 segundos entre tentativas
-            }
-        }
-
-        if (!$success) {
-            // Salva para retry posterior
-            $this->save_failed_webhook($webhook_data, $webhook_url);
-        }
-    }
-
-
     public function handle_external_cron_request($request)
     {
         $start_time = microtime(true);
@@ -1536,9 +1111,6 @@ class Formulario_Hapvida
         $this->log("IP do cliente: " . $this->get_client_ip());
 
         try {
-            // Processa webhooks com falha
-            $this->process_failed_webhooks();
-
 
             $execution_time = round((microtime(true) - $start_time) * 1000, 2);
             $this->log("✅ Cron externo concluído em {$execution_time}ms");
@@ -1760,28 +1332,6 @@ class Formulario_Hapvida
         error_log("✅ [DEBUG] Contadores incrementados - Daily: " . $daily_submissions[$today] .
             ", Monthly: " . $monthly_submissions[$current_month]);
     }
-
-    private function save_failed_webhook($webhook_data, $webhook_url, $error_message)
-    {
-        $failed_webhooks = get_option($this->failed_webhooks_option, array());
-
-        $failed_webhook = array(
-            'webhook_id' => uniqid('webhook_'),
-            'data' => $webhook_data,
-            'url' => $webhook_url,
-            'error' => $error_message,
-            'created_at' => current_time('mysql'),
-            'attempts' => 0,
-            'max_attempts' => $this->max_webhook_attempts,
-            'status' => 'pending'
-        );
-
-        $failed_webhooks[] = $failed_webhook;
-        update_option($this->failed_webhooks_option, $failed_webhooks);
-
-        $this->log("ðŸ’¾ Webhook salvo para retry posterior - ID: " . $failed_webhook['webhook_id']);
-    }
-
     private function prepare_webhook_data($form_data, $vendedor)
     {
         // Copia dados do formulário
@@ -1813,19 +1363,6 @@ class Formulario_Hapvida
             implode(', ', $form_data['ages']) : $form_data['ages'];
 
         return $webhook_data;
-    }
-
-    // VERSÃO SIMPLIFICADA - Agora apenas reagenda processamento
-    public function process_failed_webhooks()
-    {
-        $this->log("ðŸ“‹ Reagendando processamento de webhooks falhos");
-
-        // Apenas agenda o processamento da fila
-        if (!wp_next_scheduled('hapvida_process_webhook_queue')) {
-            wp_schedule_single_event(time() + 5, 'hapvida_process_webhook_queue');
-        }
-
-        return true;
     }
 
     private function send_definitive_failure_notification($webhook_data, $webhook_id, $total_attempts)
@@ -2031,55 +1568,6 @@ class Formulario_Hapvida
             error_log("HAPVIDA CRITICAL ERROR: " . $e->getMessage());
         }
     }
-
-    private function cleanup_old_webhooks()
-    {
-        try {
-            $failed_webhooks = get_option($this->failed_webhooks_option, array());
-
-            if (empty($failed_webhooks)) {
-                return;
-            }
-
-            $original_count = count($failed_webhooks);
-            $cutoff_time = strtotime('-24 hours');
-            $cleaned_webhooks = array();
-            $removed_count = 0;
-
-            foreach ($failed_webhooks as $webhook) {
-                $created_at = isset($webhook['created_at']) ? strtotime($webhook['created_at']) : 0;
-
-                // Mantém apenas webhooks das últimas 24 horas que ainda estão pendentes
-                if ($created_at > $cutoff_time && $webhook['status'] === 'pending') {
-                    $cleaned_webhooks[] = $webhook;
-                } else if ($webhook['status'] === 'pending') {
-                    // Webhook muito antigo e ainda pendente - marca como falhou
-                    $this->log("ðŸ—‘ï¸ Removendo webhook antigo: ID {$webhook['webhook_id']} - Cliente: " .
-                        ($webhook['data']['nome'] ?? 'N/A'));
-                    $removed_count++;
-
-                    // Envia notificação final se ainda não foi enviada
-                    if (isset($webhook['data']) && !isset($webhook['final_notification_sent'])) {
-                        $this->send_definitive_failure_notification(
-                            $webhook['data'],
-                            $webhook['webhook_id'],
-                            $webhook['max_attempts']
-                        );
-                    }
-                }
-            }
-
-            if ($removed_count > 0) {
-                update_option($this->failed_webhooks_option, $cleaned_webhooks);
-                $this->log("ðŸ§¹ Limpeza concluída: {$removed_count} webhooks antigos removidos");
-                error_log("HAPVIDA: Limpeza de webhooks - {$removed_count} removidos de {$original_count} total");
-            }
-
-        } catch (Exception $e) {
-            $this->log("âŒ Erro na limpeza de webhooks: " . $e->getMessage());
-        }
-    }
-
     private function should_retry_webhook($response, $response_body = '')
     {
         // Se é um WP_Error, verifica mensagens específicas
@@ -2269,103 +1757,6 @@ class Formulario_Hapvida
             )
         );
     }
-
-    /**
-     * Processa fila de webhooks de forma assíncrona
-     */
-    public function process_webhook_queue_async()
-    {
-        // Verifica nonce se chamado via AJAX
-        if (defined('DOING_AJAX') && DOING_AJAX) {
-            check_ajax_referer('hapvida_async_webhook', 'security');
-        }
-
-        // Define limite de tempo para processamento
-        @set_time_limit(30);
-
-        $queue = get_option('hapvida_webhook_queue', array());
-        if (empty($queue)) {
-            return;
-        }
-
-        $processed = array();
-        $failed = array();
-        $max_process = 5; // Processa até 5 webhooks por vez
-
-        foreach ($queue as $index => $webhook_data) {
-            if ($index >= $max_process) {
-                break;
-            }
-
-            $form_data = $webhook_data['form_data'];
-            $vendedor = $webhook_data['vendedor'];
-
-            // Determina se deve usar tracking baseado em configurações
-            $options = get_option($this->settings_option_name);
-            $is_business_hours = $this->is_business_hours();
-            $enable_redistributions = isset($options['enable_lead_redistribution']) &&
-                $options['enable_lead_redistribution'] === 'yes';
-
-            if ($enable_redistributions && $is_business_hours) {
-                $success = $this->send_to_webhook_with_tracking($form_data, $vendedor);
-            } else {
-                $success = $this->send_to_webhook_without_tracking($form_data, $vendedor);
-            }
-
-            if ($success) {
-                $processed[] = $index;
-            } else {
-                // Mantém para retry posterior
-                $webhook_data['retry_count'] = isset($webhook_data['retry_count']) ?
-                    $webhook_data['retry_count'] + 1 : 1;
-                if ($webhook_data['retry_count'] < 3) {
-                    $failed[] = $webhook_data;
-                }
-            }
-        }
-
-        // Remove processados e atualiza fila
-        foreach (array_reverse($processed) as $index) {
-            unset($queue[$index]);
-        }
-
-        // Adiciona falhas de volta Ã  fila para retry
-        $queue = array_merge($failed, array_values($queue));
-
-        update_option('hapvida_webhook_queue', $queue);
-
-        // Se ainda há itens na fila, agenda próximo processamento
-        if (!empty($queue)) {
-            wp_schedule_single_event(time() + 10, 'hapvida_process_webhook_queue');
-        }
-
-        $this->log("✅ Processamento assíncrono: " . count($processed) . " webhooks enviados, " .
-            count($failed) . " para retry");
-
-        if (defined('DOING_AJAX') && DOING_AJAX) {
-            wp_die();
-        }
-    }
-
-    // VERSÃO SIMPLIFICADA
-    private function send_to_webhook_without_tracking($form_data, $vendedor)
-    {
-        try {
-            // Prepara dados
-            $webhook_data = $this->prepare_webhook_data($form_data, $vendedor);
-
-            // Enfileira para processamento
-            $this->save_webhook_entry($webhook_data, 'pending', 'Aguardando processamento');
-
-            return true; // Sempre retorna true pois foi enfileirado
-
-        } catch (Exception $e) {
-            $this->log("âš ï¸ Erro ao enfileirar: " . $e->getMessage());
-            return false;
-        }
-    }
-
-
     /**
      * *** NOVO: AJAX para retry manual de webhooks (para usar na admin) ***
      */
@@ -2377,8 +1768,6 @@ class Formulario_Hapvida
             wp_send_json_error('Permissão negada');
         }
 
-        $this->process_failed_webhooks();
-
         $failed_webhooks = get_option($this->failed_webhooks_option, array());
         $pending_count = count(array_filter($failed_webhooks, function ($w) {
             return $w['status'] === 'pending';
@@ -2389,68 +1778,6 @@ class Formulario_Hapvida
             'pending_webhooks' => $pending_count
         ));
     }
-
-
-    private function unmark_form_as_processed($form_data)
-    {
-        $telefone = isset($form_data['telefone']) ? $form_data['telefone'] : '';
-        if (!empty($telefone)) {
-            $telefone_clean = preg_replace('/[^0-9]/', '', $telefone);
-            if (!empty($telefone_clean)) {
-                $processed_key = 'processed_phone_' . md5($telefone_clean);
-                delete_transient($processed_key);
-                $this->log("ðŸ”“ Marcação de processado removida para telefone: " . $telefone);
-            }
-        }
-    }
-
-
-    public function cleanup_expired_submissions()
-    {
-        global $wpdb;
-
-        // Limpa transients expirados relacionados a submissões
-        $wpdb->query(
-            $wpdb->prepare(
-                "DELETE FROM {$wpdb->options} 
-             WHERE option_name LIKE %s 
-             AND option_name LIKE %s",
-                '_transient_timeout_processed_phone_%',
-                '%%'
-            )
-        );
-
-        $this->log("ðŸ§¹ Limpeza de submissões expiradas executada");
-    }
-
-
-    private function is_form_already_submitted($form_data)
-    {
-        $telefone = isset($form_data['telefone']) ? $form_data['telefone'] : '';
-        if (empty($telefone)) {
-            return false; // Sem telefone, não tem como verificar
-        }
-
-        // Normaliza o telefone (remove formatação)
-        $telefone_clean = preg_replace('/[^0-9]/', '', $telefone);
-
-        if (empty($telefone_clean)) {
-            return false;
-        }
-
-        // Verificação por telefone
-        $processed_key = 'processed_phone_' . md5($telefone_clean);
-        $processed = get_transient($processed_key);
-
-        if ($processed) {
-            $this->log("âš ï¸ Verificação duplicação: Telefone {$telefone} já foi processado recentemente");
-            return true;
-        }
-
-        $this->log("✅ Verificação duplicação: Telefone {$telefone} OK para nova submissão");
-        return false;
-    }
-
 
     private function get_user_ip()
     {
@@ -2956,243 +2283,15 @@ class Formulario_Hapvida
         return $lead_id;
     }
 
-    private function get_dynamic_timeout()
-    {
-        $options = get_option($this->settings_option_name);
-
-        // Verifica se é horário comercial
-        if ($this->is_business_hours()) {
-            return isset($options['redistribution_timeout_weekdays']) ?
-                intval($options['redistribution_timeout_weekdays']) : 10;
-        } else {
-            return isset($options['redistribution_timeout_weekends']) ?
-                intval($options['redistribution_timeout_weekends']) : 30;
-        }
-    }
-
     private function load_timeout_settings()
     {
         $options = get_option($this->settings_option_name);
 
         // Define timeouts com base nas opções ou usa padrões
-        $this->business_hours_timeout = isset($options['redistribution_timeout']) ? intval($options['redistribution_timeout']) : 10;
-        $this->after_hours_timeout = isset($options['redistribution_timeout_after_hours']) ? intval($options['redistribution_timeout_after_hours']) : 30;
+        $this->business_hours_timeout = isset($options['business_hours_timeout']) ? intval($options['business_hours_timeout']) : 10;
+        $this->after_hours_timeout = isset($options['after_hours_timeout']) ? intval($options['after_hours_timeout']) : 30;
 
         $this->log("Timeouts carregados - Comercial: {$this->business_hours_timeout}min, Fora do horário: {$this->after_hours_timeout}min");
-    }
-
-    private function send_to_webhook($form_data, $vendedor)
-    {
-        $options = get_option($this->settings_option_name);
-
-        if (!isset($form_data['lead_id'])) {
-            $form_data['lead_id'] = $this->generate_unique_lead_id();
-        }
-
-        $this->log("ðŸ“¤ [CORREÇÃO] Enviando para webhook - Lead ID: {$form_data['lead_id']}, Origem: " . $form_data['pagina_origem']);
-
-        // Descobre grupo do vendedor
-        $grupo = isset($vendedor['grupo']) ? $vendedor['grupo'] : $this->discover_group_from_phone($vendedor['telefone']);
-
-        // Define URL do webhook baseada no grupo
-        if ($grupo === 'seu_souza') {
-            $webhook_url = isset($options['webhook_url_seu_souza']) ? $options['webhook_url_seu_souza'] : '';
-        } else {
-            $webhook_url = isset($options['webhook_url_drv']) ? $options['webhook_url_drv'] : '';
-        }
-
-        if (empty($webhook_url)) {
-            $this->log("âŒ URL do webhook não configurada para o grupo: {$grupo}");
-            return false;
-        }
-
-        // *** CORREÇÃO DO TIMEZONE - SEMPRE USA current_time() DO WORDPRESS ***
-        $data_envio = current_time('d-m-Y');
-        $hora_envio = current_time('H:i:s');
-
-        // *** BUSCA CONTAGENS ATUAIS USANDO current_time ***
-        $today = current_time('Y-m-d');
-        $current_month = current_time('Y-m');
-
-        // Obtém contagens das opções do WordPress
-        $daily_submissions = get_option('formulario_hapvida_daily_submissions', array());
-        $monthly_submissions = get_option('formulario_hapvida_monthly_submissions', array());
-
-        $contagem_diaria = isset($daily_submissions[$today]) ? $daily_submissions[$today] : 0;
-        $contagem_mensal = isset($monthly_submissions[$current_month]) ? $monthly_submissions[$current_month] : 0;
-
-        $this->log("ðŸ“Š [CORREÇÃO] Contagens obtidas - Diária: {$contagem_diaria}, Mensal: {$contagem_mensal}");
-
-        // Prepara dados para envio
-        $filtered_form_data = array(
-            'lead_id' => $form_data['lead_id'],
-            'nome' => $form_data['name'],
-            'telefone' => $form_data['telefone'],
-            'cidade' => $form_data['cidade'],
-            'tipo_de_plano' => $form_data['qual_plano'],
-            'quantidade_de_pessoas' => $form_data['qtd_pessoas'],
-            'idades' => is_array($form_data['ages']) ? implode(', ', $form_data['ages']) : $form_data['ages'],
-            'vendedor_nome' => $vendedor['nome'],
-            'vendedor_telefone' => $vendedor['telefone'],
-            'atendente' => $vendedor['nome'],
-            'telefone_vendedor' => $vendedor['telefone'],
-            'grupo' => $grupo,
-            'data_envio' => $data_envio,
-            'hora_submissao' => $hora_envio,
-            'contagem_diaria' => $contagem_diaria,
-            'contagem_mensal' => $contagem_mensal,
-            'data_contagem' => array(
-                'dia' => $today,
-                'mes' => $current_month
-            ),
-            'pagina_origem' => $form_data['pagina_origem']
-        );
-
-        // *** ENVIO DO WEBHOOK ***
-        $this->log("ðŸ“¤ Enviando webhook para: " . substr($webhook_url, 0, 50) . "...");
-        $this->log("ðŸ“Š Data/Hora no webhook: {$data_envio} {$hora_envio}");
-
-        $webhook_config = $this->get_webhook_timeout_config();
-        $webhook_config['body'] = json_encode($filtered_form_data);
-
-        $response = wp_remote_post($webhook_url, $webhook_config);
-
-        if (is_wp_error($response)) {
-            $error_message = $response->get_error_message();
-            $this->log("âŒ Erro ao enviar webhook: {$error_message}");
-            $this->save_webhook_entry($filtered_form_data, 'pending', $error_message);
-            $this->send_first_failure_notification($filtered_form_data, $error_message);
-            return false;
-        }
-
-        $response_code = wp_remote_retrieve_response_code($response);
-        $response_body = wp_remote_retrieve_body($response);
-
-        $this->log("ðŸ“¥ Resposta do webhook - Código: {$response_code}");
-
-        if ($response_code >= 200 && $response_code < 300) {
-            $this->log("✅ Webhook enviado com sucesso!");
-            $this->save_webhook_entry($filtered_form_data, 'success', '', $response_code);
-
-            // Registra entrega pendente para monitoramento via Evolution API
-            global $hapvida_delivery_tracking;
-            if ($hapvida_delivery_tracking) {
-                $vendedor['grupo'] = $grupo;
-                $hapvida_delivery_tracking->register_pending_delivery($vendedor, $form_data['lead_id']);
-            }
-
-            return true;
-        } else {
-            $error_message = "HTTP {$response_code}";
-            $this->log("âŒ Webhook retornou erro: {$error_message}");
-            $this->save_webhook_entry($filtered_form_data, 'pending', $error_message, $response_code);
-            $this->send_first_failure_notification($filtered_form_data, $error_message);
-            return false;
-        }
-    }
-
-        private function calculate_time_to_confirmation($created_at, $confirmado_em)
-    {
-        try {
-            $created = new DateTime($created_at);
-            $confirmed = new DateTime($confirmado_em);
-            $interval = $created->diff($confirmed);
-
-            $total_minutes = ($interval->days * 24 * 60) + ($interval->h * 60) + $interval->i;
-
-            return array(
-                'total_minutes' => $total_minutes,
-                'formatted' => $interval->format('%d dias, %h horas e %i minutos'),
-                'human_readable' => $this->format_time_human_readable($total_minutes)
-            );
-        } catch (Exception $e) {
-            return array(
-                'total_minutes' => 0,
-                'formatted' => 'Erro no cálculo',
-                'human_readable' => 'Tempo indisponível'
-            );
-        }
-    }
-
-    private function format_time_human_readable($minutes)
-    {
-        if ($minutes < 1) {
-            return 'Menos de 1 minuto';
-        } elseif ($minutes < 60) {
-            return $minutes . ' minuto' . ($minutes > 1 ? 's' : '');
-        } elseif ($minutes < 1440) { // Menos de 24 horas
-            $hours = floor($minutes / 60);
-            $remaining_minutes = $minutes % 60;
-            $result = $hours . ' hora' . ($hours > 1 ? 's' : '');
-            if ($remaining_minutes > 0) {
-                $result .= ' e ' . $remaining_minutes . ' minuto' . ($remaining_minutes > 1 ? 's' : '');
-            }
-            return $result;
-        } else {
-            $days = floor($minutes / 1440);
-            $remaining_hours = floor(($minutes % 1440) / 60);
-            $result = $days . ' dia' . ($days > 1 ? 's' : '');
-            if ($remaining_hours > 0) {
-                $result .= ' e ' . $remaining_hours . ' hora' . ($remaining_hours > 1 ? 's' : '');
-            }
-            return $result;
-        }
-    }
-    private function get_vendor_priority($vendedor_nome, $grupo)
-    {
-        return 'unknown';
-    }
-
-    private function retry_webhook_with_url($webhook_data, $webhook_url, $webhook_type)
-    {
-        $this->log("ðŸ“¤ Tentando reenviar webhook de {$webhook_type} para: " . substr($webhook_url, 0, 50) . "...");
-
-        // Configurações mais robustas para o retry
-        $response = wp_remote_post($webhook_url, array(
-            'body' => json_encode($webhook_data),
-            'headers' => array('Content-Type' => 'application/json'),
-            'timeout' => 30, // Aumenta timeout para 30 segundos
-            'blocking' => true,
-            'sslverify' => false // Para casos de problemas com SSL
-        ));
-
-        if (is_wp_error($response)) {
-            $this->log("Retry de {$webhook_type} falhou: " . $response->get_error_message());
-            return false;
-        }
-
-        $response_code = wp_remote_retrieve_response_code($response);
-        if ($response_code >= 200 && $response_code < 300) {
-            $this->log("Retry de {$webhook_type} bem-sucedido (HTTP {$response_code})");
-            return true;
-        } else {
-            $this->log("Retry de {$webhook_type} falhou (HTTP {$response_code})");
-            return false;
-        }
-    }
-
-
-    private function append_text_to_whatsapp_url($base_url, $form_data)
-    {
-        $nome = isset($form_data['name']) ? $form_data['name'] : '';
-        $cidade = isset($form_data['cidade']) ? $form_data['cidade'] : '';
-        $qtd_pessoas = isset($form_data['qtd_pessoas']) ? $form_data['qtd_pessoas'] : '';
-        $plano = isset($form_data['qual_plano']) ? $form_data['qual_plano'] : '';
-
-        // *** TRATAMENTO SIMPLES DAS IDADES (baseado na versão anterior) ***
-        $idades = isset($form_data['ages'])
-            ? (is_array($form_data['ages'])
-                ? implode(', ', $form_data['ages'])
-                : $form_data['ages'])
-            : '';
-
-        $text = "Olá, meu nome é *{$nome}*, gostaria de uma cotação para a cidade de *{$cidade}*:\n\n" .
-            "*Quantidade de pessoas* = {$qtd_pessoas}\n" .
-            "*Tipo do Plano* = {$plano}\n" .
-            "*Idades* = {$idades}\n";
-
-        $encoded_text = urlencode($text);
-        return $base_url . '?text=' . $encoded_text;
     }
 
     public function shortcode_sem_titulo($atts)
@@ -5348,11 +4447,11 @@ class Formulario_Hapvida
         $is_business_hours = ($current_hour >= 8 && $current_hour < 18);
 
         if ($is_business_hours) {
-            return isset($options['redistribution_timeout_weekdays']) ?
-                intval($options['redistribution_timeout_weekdays']) : 10;
+            return isset($options['business_hours_timeout']) ?
+                intval($options['business_hours_timeout']) : 10;
         } else {
-            return isset($options['redistribution_timeout_weekends']) ?
-                intval($options['redistribution_timeout_weekends']) : 30;
+            return isset($options['after_hours_timeout']) ?
+                intval($options['after_hours_timeout']) : 30;
         }
     }
 

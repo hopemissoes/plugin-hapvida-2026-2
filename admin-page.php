@@ -32,7 +32,6 @@ class Formulario_Hapvida_Admin
 
         // AJAX para backend (admin) - apenas para usuários logados
         add_action('wp_ajax_add_vendedor', array($this, 'ajax_add_vendedor'));
-        add_action('wp_ajax_remove_vendedor', array($this, 'ajax_remove_vendedor'));
         add_action('wp_ajax_toggle_vendedor_status', array($this, 'ajax_toggle_vendedor_status'));
         add_action('wp_ajax_clear_submission_stats', array($this, 'ajax_clear_submission_stats'));
         add_action('wp_ajax_adjust_daily_count', array($this, 'ajax_adjust_daily_count'));
@@ -88,8 +87,6 @@ class Formulario_Hapvida_Admin
         add_action('wp_ajax_toggle_auto_deactivation', array($this, 'ajax_toggle_auto_deactivation'));
         add_action('wp_ajax_nopriv_toggle_auto_deactivation', array($this, 'ajax_toggle_auto_deactivation'));
 
-        // Diagnóstico de email
-        add_action('admin_action_diagnose_email_hapvida', array($this, 'handle_email_diagnostic'));
     }
 
 
@@ -401,73 +398,7 @@ class Formulario_Hapvida_Admin
 
 
 
-    public function validate_webhook_urls()
-    {
-        $options = get_option($this->option_name);
-        $validation_results = array();
 
-        // URLs obrigatórias
-        $required_urls = array(
-            'webhook_url_drv' => 'DRV - Primeiro Envio',
-            'webhook_url_seu_souza' => 'Seu Souza - Primeiro Envio'
-        );
-
-        foreach ($required_urls as $key => $label) {
-            $url = isset($options[$key]) ? $options[$key] : '';
-
-            if (empty($url)) {
-                $validation_results[$key] = array(
-                    'status' => 'error',
-                    'message' => "{$label}: URL não configurada"
-                );
-            } elseif (!filter_var($url, FILTER_VALIDATE_URL)) {
-                $validation_results[$key] = array(
-                    'status' => 'error',
-                    'message' => "{$label}: URL inválida"
-                );
-            } else {
-                $validation_results[$key] = array(
-                    'status' => 'success',
-                    'message' => "{$label}: Configurado corretamente"
-                );
-            }
-        }
-
-        return $validation_results;
-    }
-
-
-
-    private function render_vendor_activity_detailed_debug()
-    {
-        ?>
-        <div class="wrap">
-            <h1>🔍 Debug Detalhado - Atividades dos Vendedores</h1>
-
-            <div class="hapvida-card">
-                <h2>📊 Sistema Inteligente de Redistribuição</h2>
-                <div
-                    style="background: #f0f6ff; border: 2px solid #0054B8; border-radius: 8px; padding: 20px; margin-bottom: 25px;">
-                    <h3 style="color: #0054B8; margin-top: 0;">Como Funciona:</h3>
-                    <ul style="color: #666; line-height: 1.6;">
-                        <li><strong>Vendedores Ativos (última hora):</strong> Prioridade máxima para redistribuição</li>
-                        <li><strong>Vendedores Ativos (últimas 6h):</strong> Segunda prioridade</li>
-                        <li><strong>Sistema tradicional:</strong> Usado apenas como último recurso</li>
-                        <li><strong>Limpeza automática:</strong> Dados antigos (>24h) são removidos automaticamente</li>
-                    </ul>
-                </div>
-
-                ?>
-
-                <div style="margin-top: 30px; text-align: center;">
-                    <a href="<?php echo admin_url('options-general.php?page=formulario-hapvida-admin'); ?>"
-                        class="button button-primary">← Voltar ao Painel</a>
-                    <button onclick="location.reload()" class="button button-secondary">🔄 Atualizar</button>
-                </div>
-            </div>
-        </div>
-        <?php
-    }
 
 
     public function ajax_get_counts()
@@ -649,55 +580,6 @@ class Formulario_Hapvida_Admin
         return $sanitized;
     }
 
-
-    public function options_page()
-    {
-        // Determina aba ativa
-        $active_tab = isset($_GET['tab']) ? $_GET['tab'] : 'all_leads'; // Muda o padrão para 'all_leads'
-
-        echo '<div class="wrap">';
-        echo '<h1>🏥 Formulário Hapvida - Configurações</h1>';
-
-        // *** NAVEGAÇÃO POR ABAS CORRIGIDA ***
-        echo '<nav class="nav-tab-wrapper">';
-
-        // PRIMEIRA ABA: Todos os Leads
-        echo '<a href="?page=formulario_hapvida&tab=all_leads" class="nav-tab ' .
-            ($active_tab == 'all_leads' ? 'nav-tab-active' : '') .
-            '">📋 Todos os Leads</a>';
-
-        // Demais abas na sequência
-        echo '<a href="?page=formulario_hapvida&tab=settings" class="nav-tab ' . ($active_tab == 'settings' ? 'nav-tab-active' : '') . '">⚙️ Configurações</a>';
-        echo '<a href="?page=formulario_hapvida&tab=statistics" class="nav-tab ' . ($active_tab == 'statistics' ? 'nav-tab-active' : '') . '">📊 Estatísticas</a>';
-        echo '<a href="?page=formulario_hapvida&tab=leads" class="nav-tab ' . ($active_tab == 'leads' ? 'nav-tab-active' : '') . '">👥 Leads</a>';
-
-        echo '</nav>'; // FECHA O NAV COM TODAS AS ABAS DENTRO
-
-        echo '<div class="tab-content">';
-
-        // *** CONTEÚDO DAS ABAS ***
-        switch ($active_tab) {
-            case 'all_leads':
-                $this->render_all_leads_section();
-                break;
-
-            case 'statistics':
-                $this->render_statistics_section();
-                break;
-
-
-            case 'settings':
-                $this->render_settings_section();
-                break;
-
-            default:
-                $this->render_all_leads_section(); // Padrão agora é all_leads
-                break;
-        }
-
-        echo '</div>';
-        echo '</div>';
-    }
 
     private function render_settings_section()
     {
@@ -1343,62 +1225,6 @@ class Formulario_Hapvida_Admin
     }
 
 
-    public function redistribution_timeout_weekdays_callback()
-    {
-        // Verifica se a propriedade option_name está definida
-        if (!isset($this->option_name) || empty($this->option_name)) {
-            $this->option_name = 'formulario_hapvida_settings';
-        }
-
-        $options = get_option($this->option_name, array());
-        $timeout_weekdays = isset($options['redistribution_timeout_weekdays']) ? esc_attr($options['redistribution_timeout_weekdays']) : '10';
-
-        echo '<input type="number" min="1" max="120" name="' . $this->option_name . '[redistribution_timeout_weekdays]" value="' . $timeout_weekdays . '" /> minutos';
-        echo '<p class="description">Tempo limite para confirmação de leads em <strong>horário comercial de segunda a sexta-feira</strong>. Padrão: 10 minutos.</p>';
-    }
-
-
-    public function redistribution_timeout_weekends_callback()
-    {
-        // Verifica se a propriedade option_name está definida
-        if (!isset($this->option_name) || empty($this->option_name)) {
-            $this->option_name = 'formulario_hapvida_settings';
-        }
-
-        $options = get_option($this->option_name, array());
-        $timeout_weekends = isset($options['redistribution_timeout_weekends']) ? esc_attr($options['redistribution_timeout_weekends']) : '30';
-
-        echo '<input type="number" min="1" max="480" name="' . $this->option_name . '[redistribution_timeout_weekends]" value="' . $timeout_weekends . '" /> minutos';
-        echo '<p class="description"><strong>🎯 CONFIGURAÇÃO ESPECIAL:</strong></p>';
-        echo '<ul style="margin-left: 20px; color: #666; font-size: 13px;">';
-        echo '<li><strong>Sábados e Domingos:</strong> Se este valor for > 0 E estiver dentro do horário configurado, o sistema funcionará normalmente com link de confirmação</li>';
-        echo '<li><strong>Fora do horário:</strong> Usado para noites e madrugadas (sem link de confirmação)</li>';
-        echo '<li><strong>Valor 0:</strong> Desativa completamente o funcionamento nos finais de semana</li>';
-        echo '</ul>';
-        echo '<p class="description">Padrão: 30 minutos.</p>';
-    }
-
-    public function enable_redistributions_callback()
-    {
-        // Verifica se a propriedade option_name está definida
-        if (!isset($this->option_name) || empty($this->option_name)) {
-            $this->option_name = 'formulario_hapvida_settings';
-        }
-
-        $options = get_option($this->option_name, array());
-        $enable_redistributions = isset($options['enable_redistributions']) ? $options['enable_redistributions'] : '1';
-
-        echo '<select name="' . $this->option_name . '[enable_redistributions]">';
-        echo '<option value="1" ' . selected($enable_redistributions, '1', false) . '>✅ Habilitado</option>';
-        echo '<option value="0" ' . selected($enable_redistributions, '0', false) . '>❌ Desabilitado</option>';
-        echo '</select>';
-        echo '<p class="description"><strong>Controla se o sistema de redistribuições está ativo.</strong></p>';
-        echo '<ul style="margin-left: 20px; color: #666; font-size: 13px;">';
-        echo '<li><strong>Habilitado:</strong> Links de confirmação são enviados e leads são redistribuídos se não confirmados</li>';
-        echo '<li><strong>Desabilitado:</strong> Todos os leads são enviados diretamente sem confirmação (mesmo dentro do horário comercial)</li>';
-        echo '</ul>';
-    }
-
     public function section_general_callback()
     {
 
@@ -1442,18 +1268,6 @@ class Formulario_Hapvida_Admin
         echo '</div>';
         echo '<p style="margin: 5px 0; font-size: 13px; color: #6c757d;"><strong>Dica:</strong> As cidades aparecerão na mesma ordem que você digitá-las aqui.</p>';
         echo '</div>';
-    }
-
-    public function redirect_obrigado_callback()
-    {
-        $options = get_option($this->option_name);
-        $checked = isset($options['redirect_obrigado']) && $options['redirect_obrigado'] === '1';
-        echo "<label style='display: flex; align-items: center; gap: 8px; cursor: pointer;'>";
-        echo "<input type='hidden' name='{$this->option_name}[redirect_obrigado]' value='0' />";
-        echo "<input type='checkbox' name='{$this->option_name}[redirect_obrigado]' value='1' " . checked($checked, true, false) . " />";
-        echo "Ativar redirecionamento para página de obrigado";
-        echo "</label>";
-        echo "<p class='description'>Se ativado, o lead será redirecionado para a página de obrigado antes de ir ao WhatsApp. Se desativado, o lead vai direto para o WhatsApp do vendedor.</p>";
     }
 
     public function ajax_clear_submission_stats()
@@ -3448,77 +3262,6 @@ class Formulario_Hapvida_Admin
         exit;
     }
 
-    public function ajax_create_test_vendor_data()
-    {
-        if (!wp_verify_nonce($_POST['security'], 'create_test_data_nonce')) {
-            wp_send_json_error('Nonce inválido');
-            return;
-        }
-
-        if (!current_user_can('manage_options')) {
-            wp_send_json_error('Permissão negada');
-            return;
-        }
-
-        $activity_option = 'formulario_hapvida_vendor_activity';
-        $today = current_time('Y-m-d');
-
-        // Busca vendedores reais cadastrados
-        $vendedores_option = get_option('formulario_hapvida_vendedores', array());
-
-        if (empty($vendedores_option)) {
-            wp_send_json_error('Nenhum vendedor cadastrado encontrado');
-            return;
-        }
-
-        $test_activities = array();
-        $vendor_count = 0;
-
-        foreach ($vendedores_option as $grupo => $vendedores) {
-            foreach ($vendedores as $vendedor) {
-                if ($vendor_count >= 5)
-                    break 2; // Limita a 5 vendedores para teste
-
-                $vendor_key = sanitize_key($grupo . '_' . $vendedor['nome']);
-
-                // Gera dados aleatórios para teste
-                $confirmados = rand(1, 8);
-                $expirados = rand(0, 2);
-                $total_recebidos = $confirmados + $expirados + rand(0, 2);
-
-                $test_activities[$vendor_key] = array(
-                    'nome' => $vendedor['nome'],
-                    'grupo' => $grupo,
-                    'last_confirmation' => current_time('timestamp') - rand(300, 3600),
-                    'confirmations_count' => $confirmados + rand(0, 10),
-                    'last_active' => current_time('mysql'),
-                    'daily_stats' => array(
-                        $today => array(
-                            'confirmados' => $confirmados,
-                            'expirados' => $expirados,
-                            'total_recebidos' => $total_recebidos
-                        )
-                    )
-                );
-
-                $vendor_count++;
-            }
-        }
-
-        // Salva dados de teste
-        $save_result = update_option($activity_option, $test_activities);
-
-        if ($save_result) {
-            wp_send_json_success(array(
-                'message' => 'Dados de teste criados com sucesso',
-                'vendors_created' => $vendor_count,
-                'today' => $today
-            ));
-        } else {
-            wp_send_json_error('Falha ao salvar dados de teste');
-        }
-    }
-
     public function ajax_add_vendedor()
     {
         // Verifica se o usuário tem permissão
@@ -3576,13 +3319,6 @@ class Formulario_Hapvida_Admin
             'index' => $index
         ));
     }
-
-    public function ajax_remove_vendedor()
-    {
-        check_ajax_referer('vendedores_nonce', 'security');
-        wp_send_json_error('Remoção via AJAX ainda não implementada.');
-    }
-
 
     /**
      * CORREÇÃO: ajax_get_pending_webhooks_frontend()
@@ -3733,44 +3469,6 @@ class Formulario_Hapvida_Admin
     }
 
 
-    private function render_timezone_debug()
-    {
-        ?>
-        <div class="wrap">
-            <h1>🕐 Diagnóstico de Timezone</h1>
-            <div class="hapvida-card">
-
-                <h3>⚙️ Configurações de Timezone:</h3>
-                <table class="form-table">
-                    <tr>
-                        <th>WordPress Timezone:</th>
-                        <td><strong><?php echo wp_timezone_string(); ?></strong></td>
-                    </tr>
-                    <tr>
-                        <th>PHP Timezone:</th>
-                        <td><strong><?php echo date_default_timezone_get(); ?></strong></td>
-                    </tr>
-                    <tr>
-                        <th>WP current_time():</th>
-                        <td><strong><?php echo current_time('Y-m-d H:i:s'); ?></strong></td>
-                    </tr>
-                    <tr>
-                        <th>PHP date():</th>
-                        <td><strong><?php echo date('Y-m-d H:i:s'); ?></strong></td>
-                    </tr>
-                </table>
-
-                ?>
-
-                <div style="margin-top: 30px;">
-                    <a href="<?php echo admin_url('options-general.php?page=formulario-hapvida-admin'); ?>"
-                        class="button button-primary">← Voltar ao Painel</a>
-                </div>
-                </div>
-            </div>
-        </div>
-        <?php
-    }
 
 
 
@@ -3804,12 +3502,6 @@ class Formulario_Hapvida_Admin
     {
 
         if (!current_user_can('manage_options')) {
-            return;
-        }
-
-        // Verifica se está processando redirects de debug
-        if (isset($_GET['debug_timezone_admin'])) {
-            $this->render_timezone_debug();
             return;
         }
 
@@ -4879,7 +4571,6 @@ class Formulario_Hapvida_Admin
 
             .webhook-type-card:hover { transform: translateY(-1px); }
             .webhook-type-card.first-send { border-left-color: #22c55e; }
-            .webhook-type-card.redistribution { border-left-color: #eab308; }
 
             .webhook-type-card h4 {
                 margin-top: 0;
@@ -4889,7 +4580,6 @@ class Formulario_Hapvida_Admin
             }
 
             .webhook-type-card.first-send h4 { color: #16a34a; }
-            .webhook-type-card.redistribution h4 { color: #ca8a04; }
 
             .webhook-type-card p {
                 margin: 0;
@@ -5230,7 +4920,6 @@ class Formulario_Hapvida_Admin
             .lead-stat-card.today { border-left: 3px solid #FF6B00; }
             .lead-stat-card.confirmed { border-left: 3px solid #22c55e; }
             .lead-stat-card.pending { border-left: 3px solid #eab308; }
-            .lead-stat-card.redistributed { border-left: 3px solid #f97316; }
             .lead-stat-card.failed { border-left: 3px solid #ef4444; }
             .lead-stat-card.rate { border-left: 3px solid #8b5cf6; }
 
@@ -5251,7 +4940,6 @@ class Formulario_Hapvida_Admin
             .lead-stat-card.today .lead-stat-number { color: #FF6B00; }
             .lead-stat-card.confirmed .lead-stat-number { color: #22c55e; }
             .lead-stat-card.pending .lead-stat-number { color: #eab308; }
-            .lead-stat-card.redistributed .lead-stat-number { color: #f97316; }
             .lead-stat-card.failed .lead-stat-number { color: #ef4444; }
             .lead-stat-card.rate .lead-stat-number { color: #8b5cf6; }
 
@@ -5353,7 +5041,6 @@ class Formulario_Hapvida_Admin
             }
 
             .btn-force-confirm,
-            .btn-force-redistribute,
             .btn-resend-webhook,
             .btn-redirect-vendor {
                 flex: 1;
@@ -5381,17 +5068,6 @@ class Formulario_Hapvida_Admin
                 background: #16a34a;
                 transform: translateY(-1px);
                 box-shadow: 0 4px 8px rgba(34, 197, 94, 0.25);
-            }
-
-            .btn-force-redistribute {
-                background: #eab308;
-                color: #1e293b;
-            }
-
-            .btn-force-redistribute:hover {
-                background: #ca8a04;
-                transform: translateY(-1px);
-                box-shadow: 0 4px 8px rgba(234, 179, 8, 0.25);
             }
 
             /* ===== SUBMISSION STATS ===== */
@@ -5789,7 +5465,6 @@ class Formulario_Hapvida_Admin
                 .lead-card-actions { flex-direction: column; }
 
                 .btn-force-confirm,
-                .btn-force-redistribute,
                 .btn-resend-webhook,
                 .btn-redirect-vendor { min-width: auto; }
             }
@@ -6246,7 +5921,7 @@ class Formulario_Hapvida_Admin
                         }
 
                         // Primeira confirmação
-                        if (!confirm('🚨 ATENÇÃO MÁXIMA!\n\nVocê está prestes a EXCLUIR TODOS OS LEADS do sistema!\n\nEsta ação irá remover:\n✅ TODOS os leads aguardando\n✅ TODOS os leads confirmados\n✅ TODOS os leads expirados\n✅ TODOS os leads redistribuidos\n✅ TODO o histórico\n✅ TODAS as atividades dos vendedores\n\n🚨 ESTA AÇÃO É IRREVERSÍVEL!\n🚨 TODO O SISTEMA FICARÁ ZERADO!\n\nTEM CERTEZA ABSOLUTA?')) {
+                        if (!confirm('🚨 ATENÇÃO MÁXIMA!\n\nVocê está prestes a EXCLUIR TODOS OS LEADS do sistema!\n\nEsta ação irá remover:\n✅ TODOS os leads aguardando\n✅ TODOS os leads confirmados\n✅ TODOS os leads expirados\n✅ TODO o histórico\n✅ TODAS as atividades dos vendedores\n\n🚨 ESTA AÇÃO É IRREVERSÍVEL!\n🚨 TODO O SISTEMA FICARÁ ZERADO!\n\nTEM CERTEZA ABSOLUTA?')) {
                             return;
                         }
 
