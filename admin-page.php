@@ -88,6 +88,9 @@ class Formulario_Hapvida_Admin
         add_action('wp_ajax_toggle_auto_deactivation', array($this, 'ajax_toggle_auto_deactivation'));
         add_action('wp_ajax_nopriv_toggle_auto_deactivation', array($this, 'ajax_toggle_auto_deactivation'));
 
+        add_action('wp_ajax_clear_delivery_records', array($this, 'ajax_clear_delivery_records'));
+        add_action('wp_ajax_nopriv_clear_delivery_records', array($this, 'ajax_clear_delivery_records'));
+
         // Diagnóstico de email
         add_action('admin_action_diagnose_email_hapvida', array($this, 'handle_email_diagnostic'));
     }
@@ -119,6 +122,21 @@ class Formulario_Hapvida_Admin
         $settings['enable_auto_deactivation'] = $enabled;
         update_option('formulario_hapvida_settings', $settings);
         wp_send_json_success(array('enabled' => $enabled));
+    }
+
+    // AJAX: Limpar registros de monitoramento de entregas
+    public function ajax_clear_delivery_records()
+    {
+        global $hapvida_delivery_tracking;
+        if (!$hapvida_delivery_tracking) {
+            wp_send_json_error(array('message' => 'Delivery tracking não disponível'));
+            return;
+        }
+
+        $hapvida_delivery_tracking->clear_pending_deliveries();
+        $hapvida_delivery_tracking->clear_deactivation_log();
+
+        wp_send_json_success(array('message' => 'Registros limpos com sucesso'));
     }
 
     // NOVA FUNÇÃO: Toggle vendedor status para frontend (sem login)
@@ -1896,6 +1914,17 @@ class Formulario_Hapvida_Admin
                 font-size: 13px;
             }
 
+            .control-btn.danger {
+                background: #fee2e2;
+                color: #dc2626;
+                border: 1px solid #fca5a5;
+            }
+
+            .control-btn.danger:hover {
+                background: #fecaca;
+                transform: translateY(-2px);
+            }
+
             #force-update-leads {
                 background: #ff6b00;
                 color: white;
@@ -2267,6 +2296,9 @@ class Formulario_Hapvida_Admin
                     </label>
                     <span class="toggle-label" id="auto-deactivation-label">Inativar auto</span>
                 </div>
+                <button id="clear-delivery-records" class="control-btn danger small" title="Limpar todos os registros de entregas">
+                    <i class="fas fa-trash-alt"></i> Limpar
+                </button>
                 <button id="refresh-delivery-stats" class="control-btn secondary small">
                     <i class="fas fa-sync-alt"></i> Atualizar
                 </button>
@@ -2456,6 +2488,34 @@ class Formulario_Hapvida_Admin
             var refreshBtn = document.getElementById('refresh-delivery-stats');
             if (refreshBtn) {
                 refreshBtn.addEventListener('click', loadDeliveryStats);
+            }
+
+            // Limpar registros de entregas
+            var clearBtn = document.getElementById('clear-delivery-records');
+            if (clearBtn) {
+                clearBtn.addEventListener('click', function() {
+                    if (!confirm('Tem certeza que deseja limpar todos os registros de monitoramento de entregas?\n\nIsso vai remover:\n- Todas as entregas (pendentes, entregues, expiradas)\n- Todo o log de inativacoes automaticas\n\nEsta acao nao pode ser desfeita.')) return;
+                    clearBtn.disabled = true;
+                    clearBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Limpando...';
+                    var formData = new FormData();
+                    formData.append('action', 'clear_delivery_records');
+                    fetch(ajaxUrl, { method: 'POST', body: formData })
+                    .then(function(r) { return r.json(); })
+                    .then(function(res) {
+                        clearBtn.disabled = false;
+                        clearBtn.innerHTML = '<i class="fas fa-trash-alt"></i> Limpar';
+                        if (res.success) {
+                            loadDeliveryStats();
+                        } else {
+                            alert('Erro ao limpar registros');
+                        }
+                    })
+                    .catch(function() {
+                        clearBtn.disabled = false;
+                        clearBtn.innerHTML = '<i class="fas fa-trash-alt"></i> Limpar';
+                        alert('Erro ao limpar registros');
+                    });
+                });
             }
         })();
         </script>
@@ -4261,6 +4321,43 @@ class Formulario_Hapvida_Admin
                                     <div style="font-size: 13px; color: #991b1b;">Expirados (Vendedor Inativado)</div>
                                 </div>
                             </div>
+
+                            <?php if (($count_pendentes + $count_entregues + $count_expirados) > 0 || !empty($deactivation_log)): ?>
+                            <div style="margin-bottom: 20px;">
+                                <button type="button" id="admin-clear-delivery-records" class="button button-secondary" style="color: #dc2626; border-color: #fca5a5; background: #fff;">
+                                    <span class="dashicons dashicons-trash" style="margin-top: 3px;"></span> Limpar Registros de Entregas
+                                </button>
+                            </div>
+                            <script>
+                            (function(){
+                                var btn = document.getElementById('admin-clear-delivery-records');
+                                if (!btn) return;
+                                btn.addEventListener('click', function(){
+                                    if (!confirm('Tem certeza que deseja limpar todos os registros de monitoramento de entregas?\n\nIsso vai remover:\n- Todas as entregas (pendentes, entregues, expiradas)\n- Todo o log de inativacoes automaticas\n\nEsta acao nao pode ser desfeita.')) return;
+                                    btn.disabled = true;
+                                    btn.textContent = 'Limpando...';
+                                    var formData = new FormData();
+                                    formData.append('action', 'clear_delivery_records');
+                                    fetch('<?php echo admin_url("admin-ajax.php"); ?>', { method: 'POST', body: formData })
+                                    .then(function(r) { return r.json(); })
+                                    .then(function(res) {
+                                        if (res.success) {
+                                            location.reload();
+                                        } else {
+                                            alert('Erro ao limpar registros');
+                                            btn.disabled = false;
+                                            btn.innerHTML = '<span class="dashicons dashicons-trash" style="margin-top: 3px;"></span> Limpar Registros de Entregas';
+                                        }
+                                    })
+                                    .catch(function() {
+                                        alert('Erro ao limpar registros');
+                                        btn.disabled = false;
+                                        btn.innerHTML = '<span class="dashicons dashicons-trash" style="margin-top: 3px;"></span> Limpar Registros de Entregas';
+                                    });
+                                });
+                            })();
+                            </script>
+                            <?php endif; ?>
 
                             <?php if (!empty($deactivation_log)): ?>
                                 <h3 style="margin: 20px 0 10px; font-size: 15px; color: #dc2626;">Inativações Automáticas Recentes</h3>
