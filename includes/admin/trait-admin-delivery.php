@@ -150,7 +150,10 @@ trait AdminDeliveryTrait {
 
             function loadDeliveryStats() {
                 var btn = document.getElementById('refresh-delivery-stats');
-                if (btn) btn.classList.add('spinning');
+                if (btn) {
+                    btn.disabled = true;
+                    btn.innerHTML = '<i class="fas fa-sync-alt fa-spin"></i> Atualizando...';
+                }
 
                 var formData = new FormData();
                 formData.append('action', 'get_delivery_stats');
@@ -158,7 +161,10 @@ trait AdminDeliveryTrait {
                 fetch(ajaxUrl, { method: 'POST', body: formData })
                 .then(function(r) { return r.json(); })
                 .then(function(res) {
-                    if (btn) btn.classList.remove('spinning');
+                    if (btn) {
+                        btn.disabled = false;
+                        btn.innerHTML = '<i class="fas fa-sync-alt"></i> Atualizar';
+                    }
                     if (!res.success) return;
                     var d = res.data;
 
@@ -214,7 +220,10 @@ trait AdminDeliveryTrait {
                     document.getElementById('delivery-deactivation-log-container').innerHTML = logHtml;
                 })
                 .catch(function() {
-                    if (btn) btn.classList.remove('spinning');
+                    if (btn) {
+                        btn.disabled = false;
+                        btn.innerHTML = '<i class="fas fa-sync-alt"></i> Atualizar';
+                    }
                 });
             }
 

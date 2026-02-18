@@ -737,172 +737,149 @@ trait AdminPageRendererTrait {
                 </div>
                 </div>
 
-                <!-- TAB: CONFIGURAÇÕES (Webhooks + Redirecionamento + Relatórios) -->
+                <!-- TAB: CONFIGURAÇÕES (Accordion limpo) -->
                 <div class="hapvida-tab-panel" data-tab="config">
 
-                <!-- Webhooks -->
-                <div class="hapvida-row">
-                    <div class="hapvida-column full-width">
-                        <div class="hapvida-card">
-                            <h2><i class="dashicons dashicons-admin-settings"></i> Configurações de Webhooks</h2>
+                <div class="hapvida-accordion-list">
 
+                    <!-- 1. Webhooks -->
+                    <div class="hapvida-accordion open">
+                        <button type="button" class="hapvida-accordion-header">
+                            <span class="hapvida-accordion-title"><span class="dashicons dashicons-admin-settings"></span> Webhooks</span>
+                            <span class="hapvida-accordion-arrow dashicons dashicons-arrow-down-alt2"></span>
+                        </button>
+                        <div class="hapvida-accordion-body">
                             <form action="options.php" method="post">
                                 <?php
                                 settings_fields('formulario_hapvida_settings');
                                 do_settings_sections('formulario-hapvida-admin');
-                                submit_button('Salvar Configurações de Webhooks');
+                                submit_button('Salvar Webhooks');
                                 ?>
                             </form>
                         </div>
                     </div>
-                </div>
 
-                <!-- Redirecionamento -->
-                <div class="hapvida-row">
-                    <div class="hapvida-column full-width">
-                        <div class="hapvida-card">
-                            <h2><i class="dashicons dashicons-migrate"></i> Redirecionamento após Envio</h2>
-                            <p class="hapvida-auto-activate-desc" style="margin-bottom: 16px;">
-                                Configure o comportamento do redirecionamento após o envio do formulário.
-                            </p>
-
-                            <?php
-                            $options_redirect = get_option($this->option_name);
-                            $redirect_ativo = isset($options_redirect['redirect_obrigado']) && $options_redirect['redirect_obrigado'] === '1';
-                            ?>
-
-                            <?php if ($redirect_ativo): ?>
-                                <div class="hapvida-alert success">
-                                    <strong>Ativo:</strong> O lead será redirecionado para a página de obrigado antes de ir ao WhatsApp.
-                                </div>
-                            <?php else: ?>
-                                <div class="hapvida-alert warning">
-                                    <strong>Desativado:</strong> O lead será redirecionado direto para o WhatsApp do vendedor.
-                                </div>
-                            <?php endif; ?>
-
+                    <!-- 2. Redirecionamento -->
+                    <?php
+                    $options_redirect = get_option($this->option_name);
+                    $redirect_ativo = isset($options_redirect['redirect_obrigado']) && $options_redirect['redirect_obrigado'] === '1';
+                    ?>
+                    <div class="hapvida-accordion">
+                        <button type="button" class="hapvida-accordion-header">
+                            <span class="hapvida-accordion-title">
+                                <span class="dashicons dashicons-migrate"></span> Redirecionamento
+                                <span class="hapvida-accordion-badge <?php echo $redirect_ativo ? 'badge-on' : 'badge-off'; ?>"><?php echo $redirect_ativo ? 'Ativo' : 'Off'; ?></span>
+                            </span>
+                            <span class="hapvida-accordion-arrow dashicons dashicons-arrow-down-alt2"></span>
+                        </button>
+                        <div class="hapvida-accordion-body" style="display:none;">
                             <form action="options.php" method="post">
                                 <?php settings_fields('formulario_hapvida_settings'); ?>
                                 <input type="hidden" name="<?php echo $this->option_name; ?>[redirect_obrigado]" value="0" />
-                                <table class="form-table" role="presentation">
-                                    <tr>
-                                        <th scope="row">
-                                            <label for="redirect_obrigado">Página de Obrigado</label>
-                                        </th>
-                                        <td>
-                                            <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
-                                                <input type="checkbox" id="redirect_obrigado" name="<?php echo $this->option_name; ?>[redirect_obrigado]" value="1" <?php checked($redirect_ativo, true); ?> />
-                                                Redirecionar para página de obrigado antes do WhatsApp
-                                            </label>
-                                            <p class="description">Se ativado, o lead passa pela página de obrigado antes de abrir o WhatsApp. Se desativado, vai direto para o WhatsApp.</p>
-                                        </td>
-                                    </tr>
-                                </table>
-                                <?php submit_button('💾 Salvar Configuração de Redirecionamento', 'primary', 'submit', false); ?>
+                                <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; padding: 12px 0;">
+                                    <input type="checkbox" id="redirect_obrigado" name="<?php echo $this->option_name; ?>[redirect_obrigado]" value="1" <?php checked($redirect_ativo, true); ?> style="width:18px;height:18px;" />
+                                    <span>Redirecionar para pagina de obrigado antes do WhatsApp</span>
+                                </label>
+                                <p class="description" style="margin-bottom: 14px;">Se desativado, o lead vai direto para o WhatsApp do vendedor.</p>
+                                <?php submit_button('Salvar', 'primary', 'submit', false); ?>
                             </form>
                         </div>
                     </div>
-                </div>
 
-                <!-- Relatórios de Leads -->
-                <div class="hapvida-row">
-                    <div class="hapvida-column full-width">
-                        <div class="hapvida-card">
-                            <h2><i class="dashicons dashicons-chart-bar"></i> Configurações de Relatórios de Leads</h2>
-                            <p class="hapvida-auto-activate-desc" style="margin-bottom: 16px;">
-                                Configure as credenciais de acesso para a página de relatórios. Após configurar, adicione o
-                                shortcode
-                                <code style="background: #f1f5f9; padding: 2px 8px; border-radius: 4px; font-size: 12px;">[hapvida_reports]</code>
-                                em qualquer página para exibir o dashboard de relatórios.
-                            </p>
-
-                            <?php
-                            $options = get_option($this->option_name);
-                            $has_drv_username = !empty($options['drv_username']);
-                            $has_drv_password = !empty($options['drv_password']);
-                            $has_seusouza_username = !empty($options['seusouza_username']);
-                            $has_seusouza_password = !empty($options['seusouza_password']);
-
-                            if (!$has_drv_username || !$has_drv_password || !$has_seusouza_username || !$has_seusouza_password) {
-                                echo '<div class="hapvida-alert warning">';
-                                echo '<strong>Atenção:</strong> Configure os usuários e senhas para ambos os grupos (DRV e Seu Souza) para habilitar o acesso aos relatórios.';
-                                echo '</div>';
-                            } else {
-                                echo '<div class="hapvida-alert success">';
-                                echo '<strong>Configurado!</strong> Use o shortcode <code>[hapvida_reports]</code> em uma página para acessar os relatórios.';
-                                echo '</div>';
-                            }
-                            ?>
-
+                    <!-- 3. Relatórios de Leads -->
+                    <?php
+                    $options = get_option($this->option_name);
+                    $has_drv = !empty($options['drv_username']) && !empty($options['drv_password']);
+                    $has_souza = !empty($options['seusouza_username']) && !empty($options['seusouza_password']);
+                    $reports_configured = $has_drv && $has_souza;
+                    ?>
+                    <div class="hapvida-accordion">
+                        <button type="button" class="hapvida-accordion-header">
+                            <span class="hapvida-accordion-title">
+                                <span class="dashicons dashicons-chart-bar"></span> Relatorios
+                                <span class="hapvida-accordion-badge <?php echo $reports_configured ? 'badge-on' : 'badge-off'; ?>"><?php echo $reports_configured ? 'OK' : 'Pendente'; ?></span>
+                            </span>
+                            <span class="hapvida-accordion-arrow dashicons dashicons-arrow-down-alt2"></span>
+                        </button>
+                        <div class="hapvida-accordion-body" style="display:none;">
+                            <p style="color:#64748b;margin-bottom:12px;">Shortcode: <code style="background:#f1f5f9;padding:2px 8px;border-radius:4px;font-size:12px;">[hapvida_reports]</code></p>
                             <form action="options.php" method="post">
                                 <?php settings_fields('formulario_hapvida_settings'); ?>
-
-                                <table class="form-table" role="presentation">
-                                    <tr>
-                                        <th colspan="2" style="background: #eff6ff; padding: 10px; font-size: 14px; font-weight: 600; color: #1e40af; border-radius: 6px;">
-                                            Grupo DRV
-                                        </th>
-                                    </tr>
-                                    <tr>
-                                        <th scope="row">
-                                            <label for="drv_username">Usuário DRV</label>
-                                        </th>
-                                        <td>
-                                            <?php
-                                            $drv_username = isset($options['drv_username']) ? esc_attr($options['drv_username']) : '';
-                                            echo "<input type='text' id='drv_username' class='regular-text' name='{$this->option_name}[drv_username]' value='{$drv_username}' placeholder='Digite o usuário DRV' />";
-                                            echo "<p class='description'>Usuário para acessar relatórios do grupo DRV.</p>";
-                                            ?>
-                                        </td>
-                                    </tr>
-                                    <tr>
-                                        <th scope="row">
-                                            <label for="drv_password">Senha DRV</label>
-                                        </th>
-                                        <td>
-                                            <?php
-                                            $drv_password = isset($options['drv_password']) ? esc_attr($options['drv_password']) : '';
-                                            echo "<input type='password' id='drv_password' class='regular-text' name='{$this->option_name}[drv_password]' value='{$drv_password}' placeholder='Digite uma senha forte' autocomplete='new-password' />";
-                                            echo "<p class='description'>Senha para acessar os relatórios do grupo DRV.</p>";
-                                            ?>
-                                        </td>
-                                    </tr>
-                                    <tr>
-                                        <th colspan="2" style="background: #fff7ed; padding: 10px; font-size: 14px; font-weight: 600; color: #c2410c; border-radius: 6px;">
-                                            Grupo Seu Souza
-                                        </th>
-                                    </tr>
-                                    <tr>
-                                        <th scope="row">
-                                            <label for="seusouza_username">Usuário Seu Souza</label>
-                                        </th>
-                                        <td>
-                                            <?php
-                                            $seusouza_username = isset($options['seusouza_username']) ? esc_attr($options['seusouza_username']) : '';
-                                            echo "<input type='text' id='seusouza_username' class='regular-text' name='{$this->option_name}[seusouza_username]' value='{$seusouza_username}' placeholder='Digite o usuário Seu Souza' />";
-                                            echo "<p class='description'>Usuário para acessar relatórios do grupo Seu Souza.</p>";
-                                            ?>
-                                        </td>
-                                    </tr>
-                                    <tr>
-                                        <th scope="row">
-                                            <label for="seusouza_password">Senha Seu Souza</label>
-                                        </th>
-                                        <td>
-                                            <?php
-                                            $seusouza_password = isset($options['seusouza_password']) ? esc_attr($options['seusouza_password']) : '';
-                                            echo "<input type='password' id='seusouza_password' class='regular-text' name='{$this->option_name}[seusouza_password]' value='{$seusouza_password}' placeholder='Digite uma senha forte' autocomplete='new-password' />";
-                                            echo "<p class='description'>Senha para acessar os relatórios do grupo Seu Souza.</p>";
-                                            ?>
-                                        </td>
-                                    </tr>
-                                </table>
-
-                                <?php submit_button('Salvar Configurações de Relatórios', 'primary', 'submit', false); ?>
+                                <div class="hapvida-credentials-grid">
+                                    <div class="hapvida-cred-group" style="border-left:3px solid #3b82f6;">
+                                        <strong style="color:#1e40af;">DRV</strong>
+                                        <?php
+                                        $drv_u = isset($options['drv_username']) ? esc_attr($options['drv_username']) : '';
+                                        $drv_p = isset($options['drv_password']) ? esc_attr($options['drv_password']) : '';
+                                        ?>
+                                        <input type="text" class="regular-text" name="<?php echo $this->option_name; ?>[drv_username]" value="<?php echo $drv_u; ?>" placeholder="Usuario" />
+                                        <input type="password" class="regular-text" name="<?php echo $this->option_name; ?>[drv_password]" value="<?php echo $drv_p; ?>" placeholder="Senha" autocomplete="new-password" />
+                                    </div>
+                                    <div class="hapvida-cred-group" style="border-left:3px solid #f97316;">
+                                        <strong style="color:#c2410c;">Seu Souza</strong>
+                                        <?php
+                                        $sz_u = isset($options['seusouza_username']) ? esc_attr($options['seusouza_username']) : '';
+                                        $sz_p = isset($options['seusouza_password']) ? esc_attr($options['seusouza_password']) : '';
+                                        ?>
+                                        <input type="text" class="regular-text" name="<?php echo $this->option_name; ?>[seusouza_username]" value="<?php echo $sz_u; ?>" placeholder="Usuario" />
+                                        <input type="password" class="regular-text" name="<?php echo $this->option_name; ?>[seusouza_password]" value="<?php echo $sz_p; ?>" placeholder="Senha" autocomplete="new-password" />
+                                    </div>
+                                </div>
+                                <div style="margin-top:14px;">
+                                    <?php submit_button('Salvar Credenciais', 'primary', 'submit', false); ?>
+                                </div>
                             </form>
                         </div>
                     </div>
+
                 </div>
+
+                <style>
+                    .hapvida-accordion-list { display: flex; flex-direction: column; gap: 8px; }
+                    .hapvida-accordion { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; }
+                    .hapvida-accordion-header {
+                        width: 100%; display: flex; justify-content: space-between; align-items: center;
+                        padding: 14px 20px; background: #fff; border: none; cursor: pointer;
+                        font-size: 15px; font-weight: 600; color: #1a202c; transition: background 0.2s;
+                    }
+                    .hapvida-accordion-header:hover { background: #f8fafc; }
+                    .hapvida-accordion-title { display: flex; align-items: center; gap: 8px; }
+                    .hapvida-accordion-title .dashicons { color: #ff6b00; font-size: 18px; width: 18px; height: 18px; }
+                    .hapvida-accordion-arrow { transition: transform 0.3s; color: #94a3b8; }
+                    .hapvida-accordion.open .hapvida-accordion-arrow { transform: rotate(180deg); }
+                    .hapvida-accordion-body { padding: 0 20px 20px; }
+                    .hapvida-accordion-badge {
+                        font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 10px; margin-left: 6px;
+                    }
+                    .hapvida-accordion-badge.badge-on { background: #dcfce7; color: #166534; }
+                    .hapvida-accordion-badge.badge-off { background: #fef3c7; color: #92400e; }
+                    .hapvida-credentials-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+                    .hapvida-cred-group {
+                        display: flex; flex-direction: column; gap: 8px;
+                        padding: 12px 16px; background: #f8fafc; border-radius: 8px;
+                    }
+                    .hapvida-cred-group input { width: 100% !important; max-width: 100% !important; }
+                    @media (max-width: 768px) { .hapvida-credentials-grid { grid-template-columns: 1fr; } }
+                </style>
+
+                <script>
+                (function(){
+                    document.querySelectorAll('.hapvida-accordion-header').forEach(function(btn){
+                        btn.addEventListener('click', function(){
+                            var acc = this.closest('.hapvida-accordion');
+                            var body = acc.querySelector('.hapvida-accordion-body');
+                            var isOpen = acc.classList.contains('open');
+                            if (isOpen) {
+                                acc.classList.remove('open');
+                                body.style.display = 'none';
+                            } else {
+                                acc.classList.add('open');
+                                body.style.display = 'block';
+                            }
+                        });
+                    });
+                })();
+                </script>
 
                 </div>
 

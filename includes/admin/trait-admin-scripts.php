@@ -516,12 +516,34 @@ trait AdminScriptsTrait {
                                     e.preventDefault();
                                     console.log('🔄 Atualização manual solicitada');
                                     var btn = $(this);
+                                    if (btn.prop('disabled')) return;
                                     var originalText = btn.html();
                                     btn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i> Atualizando...');
-                                    updateLeads();
-                                    setTimeout(function () {
-                                        btn.prop('disabled', false).html(originalText);
-                                    }, 1000);
+
+                                    $.ajax({
+                                        url: ajaxurl,
+                                        type: 'POST',
+                                        dataType: 'json',
+                                        data: { action: 'get_recent_leads' },
+                                        success: function (response) {
+                                            if (response && response.success) {
+                                                var tbody = $('#leads-table-body');
+                                                if (tbody.length === 0) return;
+                                                tbody.empty();
+                                                var leads = response.data;
+                                                if (!leads || !Array.isArray(leads) || leads.length === 0) {
+                                                    tbody.html('<tr><td colspan="6" style="text-align:center;">Nenhum lead registrado</td></tr>');
+                                                } else {
+                                                    leads.forEach(function (lead) {
+                                                        tbody.append('<tr class="webhook-row" data-webhook-id="' + lead.id + '" style="cursor:pointer;"><td>' + lead.created_at + '</td><td style="color:#0054B8;font-weight:500;">' + lead.client_name + '</td><td><span style="padding:2px 8px;background:#e3f2fd;border-radius:3px;">' + lead.grupo + '</span></td><td>' + lead.phone + '</td><td>' + lead.city + '</td><td>' + lead.vendor + '</td></tr>');
+                                                    });
+                                                }
+                                            }
+                                        },
+                                        complete: function () {
+                                            btn.prop('disabled', false).html(originalText);
+                                        }
+                                    });
                                 });
 
                                 // Objeto de debug global

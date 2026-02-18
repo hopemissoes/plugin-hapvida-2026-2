@@ -218,9 +218,24 @@ class Hapvida_Delivery_Tracking
         $status = null;
         $lead_id = null;
 
-        // Formato Evolution API (messages.update)
-        if (isset($body['event']) && $body['event'] === 'messages.update') {
+        // Detecta evento: pode estar no body OU no path da URL (Webhook by Events)
+        $event = null;
+        if (isset($body['event'])) {
+            $event = strtolower(str_replace('_', '.', $body['event']));
+        } elseif ($request instanceof WP_REST_Request && $request->get_param('event')) {
+            $event = strtolower(str_replace('_', '.', $request->get_param('event')));
+        }
+
+        // Formato Evolution API (messages.update / MESSAGES_UPDATE / messages-update)
+        $is_messages_update = ($event === 'messages.update' || $event === 'messages-update');
+
+        if ($is_messages_update || isset($body['data'])) {
             $data = isset($body['data']) ? $body['data'] : array();
+
+            // Evolution API v2 pode enviar array de updates
+            if (isset($data[0]) && is_array($data[0])) {
+                $data = $data[0];
+            }
 
             // Formato real da Evolution v2: data.remoteJid e data.status (texto)
             if (isset($data['remoteJid'])) {
@@ -232,6 +247,7 @@ class Hapvida_Delivery_Tracking
             // Formato antigo: data.key.remoteJid (fallback)
             if (!$phone && isset($data['key']['remoteJid'])) {
                 $phone = preg_replace('/@.*$/', '', $data['key']['remoteJid']);
+                $phone = preg_replace('/:\d+$/', '', $phone);
             }
 
             // Status como texto (DELIVERY_ACK, READ, SERVER_ACK, etc.)
@@ -239,22 +255,34 @@ class Hapvida_Delivery_Tracking
             // DELIVERY_ACK = entregue ao dispositivo (2 checks)
             // READ = lido (2 checks azuis)
             if (isset($data['status'])) {
-                $raw_evo_status = strtoupper($data['status']);
+                $raw_evo_status = strtoupper(is_string($data['status']) ? $data['status'] : '');
                 if (in_array($raw_evo_status, array('SERVER_ACK', 'DELIVERY_ACK', 'READ', 'PLAYED'))) {
+                    $status = 'delivered';
+                }
+                // Status numérico direto no campo status
+                if (!$status && is_numeric($data['status']) && intval($data['status']) >= 2) {
                     $status = 'delivered';
                 }
             }
 
-            // Fallback: status numérico (formato antigo)
+            // Fallback: status numérico aninhado (formato antigo)
             if (!$status && isset($data['update']['status'])) {
                 $status_code = intval($data['update']['status']);
                 if ($status_code >= 2) { // 2 = SERVER_ACK, 3 = DELIVERY_ACK, 4 = READ
                     $status = 'delivered';
                 }
             }
+
+            // Fallback: data.update.status como texto
+            if (!$status && isset($data['update']['status']) && is_string($data['update']['status'])) {
+                $raw_update = strtoupper($data['update']['status']);
+                if (in_array($raw_update, array('SERVER_ACK', 'DELIVERY_ACK', 'READ', 'PLAYED'))) {
+                    $status = 'delivered';
+                }
+            }
         }
 
-        // Formato simplificado (n8n ou custom)
+        // Formato simplificado (n8n ou custom) - campos no nível raiz
         if (!$phone && isset($body['telefone'])) {
             $phone = $body['telefone'];
         }
@@ -263,11 +291,15 @@ class Hapvida_Delivery_Tracking
         }
         if (!$phone && isset($body['remoteJid'])) {
             $phone = preg_replace('/@.*$/', '', $body['remoteJid']);
+            $phone = preg_replace('/:\d+$/', '', $phone);
         }
 
         if (!$status && isset($body['status'])) {
-            $raw_status = strtolower($body['status']);
-            if (in_array($raw_status, array('delivered', 'read', 'delivery_ack', 'played'))) {
+            $raw_status = strtolower(is_string($body['status']) ? $body['status'] : '');
+            if (in_array($raw_status, array('delivered', 'read', 'delivery_ack', 'server_ack', 'played'))) {
+                $status = 'delivered';
+            }
+            if (!$status && is_numeric($body['status']) && intval($body['status']) >= 2) {
                 $status = 'delivered';
             }
         }
@@ -278,6 +310,7 @@ class Hapvida_Delivery_Tracking
 
         // Se não conseguiu extrair telefone, retorna erro
         if (!$phone) {
+            error_log("HAPVIDA DELIVERY: Webhook sem telefone - event={$event}, keys=" . implode(',', array_keys($body)));
             return new WP_REST_Response(array(
                 'success' => false,
                 'message' => 'Telefone não encontrado no payload'
@@ -286,8 +319,9 @@ class Hapvida_Delivery_Tracking
 
         // Se não conseguiu extrair status, loga para debug
         if (!$status) {
-            $raw_status_info = isset($data['status']) ? $data['status'] : (isset($body['status']) ? $body['status'] : 'N/A');
-            error_log("HAPVIDA DELIVERY: Webhook recebido mas status NAO reconhecido - phone={$phone}, raw_status={$raw_status_info}");
+            $data_for_log = isset($body['data']) ? $body['data'] : array();
+            $raw_status_info = isset($data_for_log['status']) ? $data_for_log['status'] : (isset($body['status']) ? $body['status'] : 'N/A');
+            error_log("HAPVIDA DELIVERY: Webhook recebido mas status NAO reconhecido - event={$event}, phone={$phone}, raw_status=" . print_r($raw_status_info, true));
         }
 
         $phone = $this->normalize_phone($phone);
