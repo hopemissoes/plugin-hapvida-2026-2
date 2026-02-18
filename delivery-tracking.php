@@ -235,9 +235,12 @@ class Hapvida_Delivery_Tracking
             }
 
             // Status como texto (DELIVERY_ACK, READ, SERVER_ACK, etc.)
+            // SERVER_ACK = servidor WhatsApp recebeu (1 check)
+            // DELIVERY_ACK = entregue ao dispositivo (2 checks)
+            // READ = lido (2 checks azuis)
             if (isset($data['status'])) {
                 $raw_evo_status = strtoupper($data['status']);
-                if (in_array($raw_evo_status, array('DELIVERY_ACK', 'READ', 'PLAYED'))) {
+                if (in_array($raw_evo_status, array('SERVER_ACK', 'DELIVERY_ACK', 'READ', 'PLAYED'))) {
                     $status = 'delivered';
                 }
             }
@@ -245,7 +248,7 @@ class Hapvida_Delivery_Tracking
             // Fallback: status numérico (formato antigo)
             if (!$status && isset($data['update']['status'])) {
                 $status_code = intval($data['update']['status']);
-                if ($status_code >= 3) { // 3 = DELIVERY_ACK, 4 = READ
+                if ($status_code >= 2) { // 2 = SERVER_ACK, 3 = DELIVERY_ACK, 4 = READ
                     $status = 'delivered';
                 }
             }
@@ -281,6 +284,12 @@ class Hapvida_Delivery_Tracking
             ), 400);
         }
 
+        // Se não conseguiu extrair status, loga para debug
+        if (!$status) {
+            $raw_status_info = isset($data['status']) ? $data['status'] : (isset($body['status']) ? $body['status'] : 'N/A');
+            error_log("HAPVIDA DELIVERY: Webhook recebido mas status NAO reconhecido - phone={$phone}, raw_status={$raw_status_info}");
+        }
+
         $phone = $this->normalize_phone($phone);
 
         // Se o status indica entrega, confirma
@@ -304,9 +313,24 @@ class Hapvida_Delivery_Tracking
 
     /**
      * Confirma a entrega de uma mensagem
+     *
+     * Usa transient como lock para evitar race condition quando
+     * múltiplos webhooks chegam simultaneamente
      */
     private function confirm_delivery($phone, $lead_id = null)
     {
+        // Lock simples via transient para evitar race condition
+        $lock_key = 'hapvida_delivery_lock';
+        $max_attempts = 5;
+        $attempt = 0;
+
+        while (get_transient($lock_key) && $attempt < $max_attempts) {
+            usleep(200000); // 200ms
+            $attempt++;
+        }
+        set_transient($lock_key, true, 10); // Lock por no máximo 10 segundos
+
+        // Lê os dados DEPOIS de adquirir o lock
         $pending = get_option(self::OPTION_PENDING, array());
         $confirmed = false;
 
@@ -325,8 +349,6 @@ class Hapvida_Delivery_Tracking
             } elseif ($this->phones_match($delivery['vendedor_telefone'], $phone)) {
                 $match = true;
                 error_log("HAPVIDA DELIVERY: Match por telefone - vendedor={$delivery['vendedor_telefone']}, webhook={$phone}");
-            } else {
-                error_log("HAPVIDA DELIVERY: SEM match - vendedor={$delivery['vendedor_telefone']}, webhook={$phone}, lead={$delivery['lead_id']}");
             }
 
             if ($match) {
@@ -334,7 +356,7 @@ class Hapvida_Delivery_Tracking
                 $delivery['confirmado_em'] = current_time('mysql');
                 $confirmed = true;
 
-                error_log("HAPVIDA DELIVERY: Entrega confirmada - Lead {$delivery['lead_id']} para {$delivery['vendedor_nome']} ({$phone})");
+                error_log("HAPVIDA DELIVERY: CONFIRMADO - Lead {$delivery['lead_id']} para {$delivery['vendedor_nome']} ({$phone})");
 
                 // Se confirmou por lead_id, para aqui
                 if ($lead_id) {
@@ -348,8 +370,18 @@ class Hapvida_Delivery_Tracking
         if ($confirmed) {
             update_option(self::OPTION_PENDING, $pending);
         } else {
-            error_log("HAPVIDA DELIVERY: NENHUM match encontrado para phone={$phone}. Pendentes: " . count(array_filter($pending, function($d) { return $d['status'] === 'pendente'; })));
+            // Log detalhado de todos os pendentes para debug
+            $pendentes_info = array();
+            foreach ($pending as $d) {
+                if ($d['status'] === 'pendente') {
+                    $pendentes_info[] = $d['vendedor_nome'] . '(' . $d['vendedor_telefone'] . ')=' . $d['lead_id'];
+                }
+            }
+            error_log("HAPVIDA DELIVERY: SEM MATCH para phone={$phone}. Pendentes: " . implode(', ', $pendentes_info));
         }
+
+        // Libera o lock
+        delete_transient($lock_key);
 
         return $confirmed;
     }
