@@ -562,6 +562,10 @@ trait AdminPageRendererTrait {
                     <span class="dashicons dashicons-admin-generic"></span>
                     <span>Configurações</span>
                 </button>
+                <button class="hapvida-tab" data-tab="monitoramento">
+                    <span class="dashicons dashicons-visibility"></span>
+                    <span>Monitoramento</span>
+                </button>
                 <button class="hapvida-tab" data-tab="invoice">
                     <span class="dashicons dashicons-media-spreadsheet"></span>
                     <span>Invoice</span>
@@ -733,108 +737,27 @@ trait AdminPageRendererTrait {
                 </div>
                 </div>
 
-                <!-- TAB: CONFIGURAÇÕES (Relatórios + Webhooks) -->
+                <!-- TAB: CONFIGURAÇÕES (Webhooks + Redirecionamento + Relatórios) -->
                 <div class="hapvida-tab-panel" data-tab="config">
-                <!-- Seção de Configurações de Relatórios -->
+
+                <!-- Webhooks -->
                 <div class="hapvida-row">
                     <div class="hapvida-column full-width">
                         <div class="hapvida-card">
-                            <h2><i class="dashicons dashicons-chart-bar"></i> Configurações de Relatórios de Leads</h2>
-                            <p class="hapvida-auto-activate-desc" style="margin-bottom: 16px;">
-                                Configure as credenciais de acesso para a página de relatórios. Após configurar, adicione o
-                                shortcode
-                                <code style="background: #f1f5f9; padding: 2px 8px; border-radius: 4px; font-size: 12px;">[hapvida_reports]</code>
-                                em qualquer página para exibir o dashboard de relatórios.
-                            </p>
-
-                            <?php
-                            $options = get_option($this->option_name);
-                            $has_drv_username = !empty($options['drv_username']);
-                            $has_drv_password = !empty($options['drv_password']);
-                            $has_seusouza_username = !empty($options['seusouza_username']);
-                            $has_seusouza_password = !empty($options['seusouza_password']);
-
-                            if (!$has_drv_username || !$has_drv_password || !$has_seusouza_username || !$has_seusouza_password) {
-                                echo '<div class="hapvida-alert warning">';
-                                echo '<strong>⚠️ Atenção:</strong> Configure os usuários e senhas para ambos os grupos (DRV e Seu Souza) para habilitar o acesso aos relatórios.';
-                                echo '</div>';
-                            } else {
-                                echo '<div class="hapvida-alert success">';
-                                echo '<strong>✅ Configurado!</strong> Use o shortcode <code>[hapvida_reports]</code> em uma página para acessar os relatórios.';
-                                echo '</div>';
-                            }
-                            ?>
+                            <h2><i class="dashicons dashicons-admin-settings"></i> Configurações de Webhooks</h2>
 
                             <form action="options.php" method="post">
-                                <?php settings_fields('formulario_hapvida_settings'); ?>
-
-                                <table class="form-table" role="presentation">
-                                    <tr>
-                                        <th colspan="2" style="background: #eff6ff; padding: 10px; font-size: 14px; font-weight: 600; color: #1e40af; border-radius: 6px;">
-                                            🔵 Grupo DRV
-                                        </th>
-                                    </tr>
-                                    <tr>
-                                        <th scope="row">
-                                            <label for="drv_username">Usuário DRV</label>
-                                        </th>
-                                        <td>
-                                            <?php
-                                            $drv_username = isset($options['drv_username']) ? esc_attr($options['drv_username']) : '';
-                                            echo "<input type='text' id='drv_username' class='regular-text' name='{$this->option_name}[drv_username]' value='{$drv_username}' placeholder='Digite o usuário DRV' />";
-                                            echo "<p class='description'>Usuário para acessar relatórios do grupo DRV.</p>";
-                                            ?>
-                                        </td>
-                                    </tr>
-                                    <tr>
-                                        <th scope="row">
-                                            <label for="drv_password">Senha DRV</label>
-                                        </th>
-                                        <td>
-                                            <?php
-                                            $drv_password = isset($options['drv_password']) ? esc_attr($options['drv_password']) : '';
-                                            echo "<input type='password' id='drv_password' class='regular-text' name='{$this->option_name}[drv_password]' value='{$drv_password}' placeholder='Digite uma senha forte' autocomplete='new-password' />";
-                                            echo "<p class='description'>Senha para acessar os relatórios do grupo DRV.</p>";
-                                            ?>
-                                        </td>
-                                    </tr>
-                                    <tr>
-                                        <th colspan="2" style="background: #fff7ed; padding: 10px; font-size: 14px; font-weight: 600; color: #c2410c; border-radius: 6px;">
-                                            🟠 Grupo Seu Souza
-                                        </th>
-                                    </tr>
-                                    <tr>
-                                        <th scope="row">
-                                            <label for="seusouza_username">Usuário Seu Souza</label>
-                                        </th>
-                                        <td>
-                                            <?php
-                                            $seusouza_username = isset($options['seusouza_username']) ? esc_attr($options['seusouza_username']) : '';
-                                            echo "<input type='text' id='seusouza_username' class='regular-text' name='{$this->option_name}[seusouza_username]' value='{$seusouza_username}' placeholder='Digite o usuário Seu Souza' />";
-                                            echo "<p class='description'>Usuário para acessar relatórios do grupo Seu Souza.</p>";
-                                            ?>
-                                        </td>
-                                    </tr>
-                                    <tr>
-                                        <th scope="row">
-                                            <label for="seusouza_password">Senha Seu Souza</label>
-                                        </th>
-                                        <td>
-                                            <?php
-                                            $seusouza_password = isset($options['seusouza_password']) ? esc_attr($options['seusouza_password']) : '';
-                                            echo "<input type='password' id='seusouza_password' class='regular-text' name='{$this->option_name}[seusouza_password]' value='{$seusouza_password}' placeholder='Digite uma senha forte' autocomplete='new-password' />";
-                                            echo "<p class='description'>Senha para acessar os relatórios do grupo Seu Souza.</p>";
-                                            ?>
-                                        </td>
-                                    </tr>
-                                </table>
-
-                                <?php submit_button('💾 Salvar Configurações de Relatórios', 'primary', 'submit', false); ?>
+                                <?php
+                                settings_fields('formulario_hapvida_settings');
+                                do_settings_sections('formulario-hapvida-admin');
+                                submit_button('Salvar Configurações de Webhooks');
+                                ?>
                             </form>
                         </div>
                     </div>
                 </div>
 
+                <!-- Redirecionamento -->
                 <div class="hapvida-row">
                     <div class="hapvida-column full-width">
                         <div class="hapvida-card">
@@ -880,6 +803,111 @@ trait AdminPageRendererTrait {
                         </div>
                     </div>
                 </div>
+
+                <!-- Relatórios de Leads -->
+                <div class="hapvida-row">
+                    <div class="hapvida-column full-width">
+                        <div class="hapvida-card">
+                            <h2><i class="dashicons dashicons-chart-bar"></i> Configurações de Relatórios de Leads</h2>
+                            <p class="hapvida-auto-activate-desc" style="margin-bottom: 16px;">
+                                Configure as credenciais de acesso para a página de relatórios. Após configurar, adicione o
+                                shortcode
+                                <code style="background: #f1f5f9; padding: 2px 8px; border-radius: 4px; font-size: 12px;">[hapvida_reports]</code>
+                                em qualquer página para exibir o dashboard de relatórios.
+                            </p>
+
+                            <?php
+                            $options = get_option($this->option_name);
+                            $has_drv_username = !empty($options['drv_username']);
+                            $has_drv_password = !empty($options['drv_password']);
+                            $has_seusouza_username = !empty($options['seusouza_username']);
+                            $has_seusouza_password = !empty($options['seusouza_password']);
+
+                            if (!$has_drv_username || !$has_drv_password || !$has_seusouza_username || !$has_seusouza_password) {
+                                echo '<div class="hapvida-alert warning">';
+                                echo '<strong>Atenção:</strong> Configure os usuários e senhas para ambos os grupos (DRV e Seu Souza) para habilitar o acesso aos relatórios.';
+                                echo '</div>';
+                            } else {
+                                echo '<div class="hapvida-alert success">';
+                                echo '<strong>Configurado!</strong> Use o shortcode <code>[hapvida_reports]</code> em uma página para acessar os relatórios.';
+                                echo '</div>';
+                            }
+                            ?>
+
+                            <form action="options.php" method="post">
+                                <?php settings_fields('formulario_hapvida_settings'); ?>
+
+                                <table class="form-table" role="presentation">
+                                    <tr>
+                                        <th colspan="2" style="background: #eff6ff; padding: 10px; font-size: 14px; font-weight: 600; color: #1e40af; border-radius: 6px;">
+                                            Grupo DRV
+                                        </th>
+                                    </tr>
+                                    <tr>
+                                        <th scope="row">
+                                            <label for="drv_username">Usuário DRV</label>
+                                        </th>
+                                        <td>
+                                            <?php
+                                            $drv_username = isset($options['drv_username']) ? esc_attr($options['drv_username']) : '';
+                                            echo "<input type='text' id='drv_username' class='regular-text' name='{$this->option_name}[drv_username]' value='{$drv_username}' placeholder='Digite o usuário DRV' />";
+                                            echo "<p class='description'>Usuário para acessar relatórios do grupo DRV.</p>";
+                                            ?>
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <th scope="row">
+                                            <label for="drv_password">Senha DRV</label>
+                                        </th>
+                                        <td>
+                                            <?php
+                                            $drv_password = isset($options['drv_password']) ? esc_attr($options['drv_password']) : '';
+                                            echo "<input type='password' id='drv_password' class='regular-text' name='{$this->option_name}[drv_password]' value='{$drv_password}' placeholder='Digite uma senha forte' autocomplete='new-password' />";
+                                            echo "<p class='description'>Senha para acessar os relatórios do grupo DRV.</p>";
+                                            ?>
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <th colspan="2" style="background: #fff7ed; padding: 10px; font-size: 14px; font-weight: 600; color: #c2410c; border-radius: 6px;">
+                                            Grupo Seu Souza
+                                        </th>
+                                    </tr>
+                                    <tr>
+                                        <th scope="row">
+                                            <label for="seusouza_username">Usuário Seu Souza</label>
+                                        </th>
+                                        <td>
+                                            <?php
+                                            $seusouza_username = isset($options['seusouza_username']) ? esc_attr($options['seusouza_username']) : '';
+                                            echo "<input type='text' id='seusouza_username' class='regular-text' name='{$this->option_name}[seusouza_username]' value='{$seusouza_username}' placeholder='Digite o usuário Seu Souza' />";
+                                            echo "<p class='description'>Usuário para acessar relatórios do grupo Seu Souza.</p>";
+                                            ?>
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <th scope="row">
+                                            <label for="seusouza_password">Senha Seu Souza</label>
+                                        </th>
+                                        <td>
+                                            <?php
+                                            $seusouza_password = isset($options['seusouza_password']) ? esc_attr($options['seusouza_password']) : '';
+                                            echo "<input type='password' id='seusouza_password' class='regular-text' name='{$this->option_name}[seusouza_password]' value='{$seusouza_password}' placeholder='Digite uma senha forte' autocomplete='new-password' />";
+                                            echo "<p class='description'>Senha para acessar os relatórios do grupo Seu Souza.</p>";
+                                            ?>
+                                        </td>
+                                    </tr>
+                                </table>
+
+                                <?php submit_button('Salvar Configurações de Relatórios', 'primary', 'submit', false); ?>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+
+                </div>
+
+                <!-- TAB: MONITORAMENTO -->
+                <div class="hapvida-tab-panel" data-tab="monitoramento">
 
                 <!-- MONITORAMENTO DE ENTREGAS (Evolution API) -->
                 <div class="hapvida-row">
@@ -976,6 +1004,43 @@ trait AdminPageRendererTrait {
                                 </div>
                             </div>
 
+                            <?php if (($count_pendentes + $count_entregues + $count_expirados) > 0 || !empty($deactivation_log)): ?>
+                            <div style="margin-bottom: 20px;">
+                                <button type="button" id="admin-clear-delivery-records" class="button button-secondary" style="color: #dc2626; border-color: #fca5a5; background: #fff;">
+                                    <span class="dashicons dashicons-trash" style="margin-top: 3px;"></span> Limpar Registros de Entregas
+                                </button>
+                            </div>
+                            <script>
+                            (function(){
+                                var btn = document.getElementById('admin-clear-delivery-records');
+                                if (!btn) return;
+                                btn.addEventListener('click', function(){
+                                    if (!confirm('Tem certeza que deseja limpar todos os registros de monitoramento de entregas?\n\nIsso vai remover:\n- Todas as entregas (pendentes, entregues, expiradas)\n- Todo o log de inativacoes automaticas\n\nEsta acao nao pode ser desfeita.')) return;
+                                    btn.disabled = true;
+                                    btn.textContent = 'Limpando...';
+                                    var formData = new FormData();
+                                    formData.append('action', 'clear_delivery_records');
+                                    fetch('<?php echo admin_url("admin-ajax.php"); ?>', { method: 'POST', body: formData })
+                                    .then(function(r) { return r.json(); })
+                                    .then(function(res) {
+                                        if (res.success) {
+                                            location.reload();
+                                        } else {
+                                            alert('Erro ao limpar registros');
+                                            btn.disabled = false;
+                                            btn.innerHTML = '<span class="dashicons dashicons-trash" style="margin-top: 3px;"></span> Limpar Registros de Entregas';
+                                        }
+                                    })
+                                    .catch(function() {
+                                        alert('Erro ao limpar registros');
+                                        btn.disabled = false;
+                                        btn.innerHTML = '<span class="dashicons dashicons-trash" style="margin-top: 3px;"></span> Limpar Registros de Entregas';
+                                    });
+                                });
+                            })();
+                            </script>
+                            <?php endif; ?>
+
                             <?php if (!empty($deactivation_log)): ?>
                                 <h3 style="margin: 20px 0 10px; font-size: 15px; color: #dc2626;">Inativações Automáticas Recentes</h3>
                                 <table class="widefat striped" style="font-size: 13px;">
@@ -1060,23 +1125,6 @@ trait AdminPageRendererTrait {
                     </div>
                 </div>
 
-                <div class="hapvida-row">
-                    <div class="hapvida-column full-width">
-                        <div class="hapvida-card">
-                            <h2><i class="dashicons dashicons-admin-settings"></i> Configurações de Webhooks</h2>
-
-
-
-                            <form action="options.php" method="post">
-                                <?php
-                                settings_fields('formulario_hapvida_settings');
-                                do_settings_sections('formulario-hapvida-admin');
-                                submit_button('Salvar Configurações de Webhooks');
-                                ?>
-                            </form>
-                        </div>
-                    </div>
-                </div>
                 </div>
 
                 <!-- TAB: INVOICE -->

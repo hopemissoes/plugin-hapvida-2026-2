@@ -21,6 +21,21 @@ trait AdminDeliveryTrait {
         wp_send_json_success($stats);
     }
 
+    // AJAX: Limpar registros de monitoramento de entregas
+    public function ajax_clear_delivery_records()
+    {
+        global $hapvida_delivery_tracking;
+        if (!$hapvida_delivery_tracking) {
+            wp_send_json_error(array('message' => 'Delivery tracking não disponível'));
+            return;
+        }
+
+        $hapvida_delivery_tracking->clear_pending_deliveries();
+        $hapvida_delivery_tracking->clear_deactivation_log();
+
+        wp_send_json_success(array('message' => 'Registros limpos com sucesso'));
+    }
+
     // AJAX: Toggle auto-deactivation setting (sem login)
     public function ajax_toggle_auto_deactivation()
     {
@@ -44,6 +59,9 @@ trait AdminDeliveryTrait {
                     </label>
                     <span class="toggle-label" id="auto-deactivation-label">Inativar auto</span>
                 </div>
+                <button id="clear-delivery-records" class="control-btn danger small" title="Limpar todos os registros de entregas">
+                    <i class="fas fa-trash-alt"></i> Limpar
+                </button>
                 <button id="refresh-delivery-stats" class="control-btn secondary small">
                     <i class="fas fa-sync-alt"></i> Atualizar
                 </button>
@@ -234,6 +252,34 @@ trait AdminDeliveryTrait {
             if (refreshBtn) {
                 refreshBtn.addEventListener('click', loadDeliveryStats);
             }
+
+            // Limpar registros de entregas
+            var clearBtn = document.getElementById('clear-delivery-records');
+            if (clearBtn) {
+                clearBtn.addEventListener('click', function() {
+                    if (!confirm('Tem certeza que deseja limpar todos os registros de monitoramento de entregas?\n\nIsso vai remover:\n- Todas as entregas (pendentes, entregues, expiradas)\n- Todo o log de inativacoes automaticas\n\nEsta acao nao pode ser desfeita.')) return;
+                    clearBtn.disabled = true;
+                    clearBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Limpando...';
+                    var formData = new FormData();
+                    formData.append('action', 'clear_delivery_records');
+                    fetch(ajaxUrl, { method: 'POST', body: formData })
+                    .then(function(r) { return r.json(); })
+                    .then(function(res) {
+                        clearBtn.disabled = false;
+                        clearBtn.innerHTML = '<i class="fas fa-trash-alt"></i> Limpar';
+                        if (res.success) {
+                            loadDeliveryStats();
+                        } else {
+                            alert('Erro ao limpar registros');
+                        }
+                    })
+                    .catch(function() {
+                        clearBtn.disabled = false;
+                        clearBtn.innerHTML = '<i class="fas fa-trash-alt"></i> Limpar';
+                        alert('Erro ao limpar registros');
+                    });
+                });
+            }
         })();
         </script>
 
@@ -379,6 +425,17 @@ trait AdminDeliveryTrait {
             .delivery-pending-list h3 i,
             .delivery-deactivation-log h3 i {
                 margin-right: 6px;
+            }
+
+            .control-btn.danger {
+                background: #fee2e2;
+                color: #dc2626;
+                border: 1px solid #fca5a5;
+            }
+
+            .control-btn.danger:hover {
+                background: #fecaca;
+                transform: translateY(-2px);
             }
 
             @media (max-width: 600px) {
