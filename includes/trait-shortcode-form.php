@@ -1460,26 +1460,25 @@ trait ShortcodeFormTrait {
                                         errorMessage.includes('já está sendo processado')) {
 
                                         return {
-                                            title: 'ðŸ“ž Formulário Já Enviado',
+                                            title: 'Formulario Ja Enviado',
                                             message: `
                     <div style="text-align: center; padding: 20px; font-family: Arial, sans-serif;">
-                        <div style="font-size: 48px; color: #0054B8; margin-bottom: 15px;">â°</div>
                         <h3 style="color: #0054B8; margin-bottom: 15px;">
-                            Seus dados já foram enviados com sucesso!
+                            Seus dados ja foram enviados com sucesso!
                         </h3>
                         <p style="font-size: 16px; color: #333; line-height: 1.5; margin-bottom: 20px;">
-                            <strong>Não se preocupe!</strong> Suas informações já estão com nossa equipe de consultores.
+                            <strong>Nao se preocupe!</strong> Suas informacoes ja estao com nossa equipe de consultores.
                         </p>
                         <div style="background: #f8f9ff; border: 2px solid #0054B8; border-radius: 12px; padding: 20px; margin: 20px 0;">
                             <p style="margin: 0; color: #0054B8; font-weight: bold; font-size: 18px;">
-                                ðŸŽ¯ Em instantes, um de nossos consultores especializados entrará em contato pelo WhatsApp!
+                                Em instantes, um de nossos consultores especializados entrara em contato pelo WhatsApp!
                             </p>
                         </div>
                         <p style="font-size: 14px; color: #666; margin-bottom: 15px;">
-                            <strong>Tempo médio de resposta:</strong> 5 a 15 minutos
+                            <strong>Tempo medio de resposta:</strong> 5 a 15 minutos
                         </p>
                         <p style="font-size: 14px; color: #666;">
-                            Se não receber contato em 30 minutos, pode enviar o formulário novamente.
+                            Se nao receber contato em 30 minutos, pode enviar o formulario novamente.
                         </p>
                     </div>
                 `,
@@ -1488,7 +1487,7 @@ trait ShortcodeFormTrait {
                                     }
 
                                     return {
-                                        title: 'âŒ Erro',
+                                        title: 'Erro',
                                         message: `<div style="text-align: center; padding: 20px;">${errorMessage}</div>`,
                                         type: 'error'
                                     };
