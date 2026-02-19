@@ -23,8 +23,8 @@ trait UtilitiesTrait {
             }
         }
 
-        // TEMPORARIO: Loga mensagens de debug que começam com >>> ou ===
-        if (strpos($message, '>>>') === 0 || strpos($message, '===') === 0) {
+        // Loga mensagens de webhook e debug que começam com >>>, === ou WEBHOOK/AVISO
+        if (strpos($message, '>>>') === 0 || strpos($message, '===') === 0 || strpos($message, 'AVISO') === 0 || strpos($message, 'WEBHOOK') !== false) {
             $timezone = new DateTimeZone('America/Fortaleza');
             $timestamp = new DateTime('now', $timezone);
             $log_entry = "[" . $timestamp->format('Y-m-d H:i:s') . "] {$message}" . PHP_EOL;

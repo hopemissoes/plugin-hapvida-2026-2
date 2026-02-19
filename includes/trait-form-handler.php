@@ -162,31 +162,69 @@ trait FormHandlerTrait {
                 }
 
                 if (!empty($webhook_url)) {
-                    // *** ENVIO ASSÃNCRONO COM TIMEOUT REDUZIDO ***
-                    $this->log("ðŸ“¤ Enviando webhook de forma assíncrona...");
+                    // *** ENVIO BLOQUEANTE COM RETRY - GARANTE ENTREGA ***
+                    error_log("HAPVIDA WEBHOOK: Iniciando envio para lead {$form_data['lead_id']} - grupo {$grupo}");
 
-                    // LOG DO ID DO VENDEDOR NO WEBHOOK
-                    if (isset($webhook_data['vendedor_id']) && !empty($webhook_data['vendedor_id'])) {
-                        $this->log("Webhook incluirá ID do vendedor: {$webhook_data['vendedor_id']}");
+                    $webhook_body = json_encode($webhook_data);
+                    $max_tentativas = 3;
+                    $webhook_response = null;
+                    $ultimo_erro = '';
+
+                    for ($tentativa = 1; $tentativa <= $max_tentativas; $tentativa++) {
+                        error_log("HAPVIDA WEBHOOK: Tentativa {$tentativa}/{$max_tentativas} para lead {$form_data['lead_id']}");
+
+                        $webhook_config = array(
+                            'timeout' => 10,
+                            'blocking' => true,
+                            'body' => $webhook_body,
+                            'headers' => array('Content-Type' => 'application/json'),
+                            'sslverify' => false,
+                            'httpversion' => '1.1',
+                        );
+
+                        $webhook_response = wp_remote_post($webhook_url, $webhook_config);
+
+                        if (is_wp_error($webhook_response)) {
+                            $ultimo_erro = $webhook_response->get_error_message();
+                            error_log("HAPVIDA WEBHOOK: ERRO tentativa {$tentativa} - {$ultimo_erro}");
+
+                            if ($tentativa < $max_tentativas) {
+                                sleep($tentativa);
+                            }
+                            continue;
+                        }
+
+                        $response_code = wp_remote_retrieve_response_code($webhook_response);
+
+                        if ($response_code >= 200 && $response_code < 300) {
+                            error_log("HAPVIDA WEBHOOK: SUCESSO na tentativa {$tentativa} - HTTP {$response_code} - lead {$form_data['lead_id']}");
+                            $webhook_success = true;
+                            $this->save_webhook_entry($webhook_data, 'sent', "Enviado com sucesso na tentativa {$tentativa} - HTTP {$response_code}");
+                            break;
+                        }
+
+                        $ultimo_erro = "HTTP {$response_code}";
+                        $response_body_text = wp_remote_retrieve_body($webhook_response);
+                        error_log("HAPVIDA WEBHOOK: HTTP {$response_code} na tentativa {$tentativa} - Body: " . substr($response_body_text, 0, 200));
+
+                        if ($response_code >= 400 && $response_code < 500 && $response_code !== 408 && $response_code !== 429) {
+                            error_log("HAPVIDA WEBHOOK: Erro definitivo HTTP {$response_code} - abortando retries");
+                            break;
+                        }
+
+                        if ($tentativa < $max_tentativas) {
+                            sleep($tentativa);
+                        }
                     }
 
-                    // Configuração otimizada com timeout reduzido
-                    $webhook_config = array(
-                        'timeout' => 5,  // Apenas 5 segundos
-                        'blocking' => false, // Não bloqueia
-                        'body' => json_encode($webhook_data),
-                        'headers' => array('Content-Type' => 'application/json'),
-                        'sslverify' => false
-                    );
+                    if (!$webhook_success) {
+                        error_log("HAPVIDA WEBHOOK: FALHA TOTAL apos {$max_tentativas} tentativas para lead {$form_data['lead_id']} - Ultimo erro: {$ultimo_erro}");
+                        $this->log(">>> WEBHOOK FALHOU: Lead {$form_data['lead_id']} - {$ultimo_erro} apos {$max_tentativas} tentativas");
+                        $this->save_webhook_entry($webhook_data, 'failed', "Falhou apos {$max_tentativas} tentativas: {$ultimo_erro}");
 
-                    // Envia sem esperar resposta
-                    wp_remote_post($webhook_url, $webhook_config);
-
-                    // Salva para retry posterior se necessário
-                    $this->save_webhook_entry($webhook_data, 'pending', 'Enviado assincronamente');
-
-                    $webhook_success = true;
-                    $this->log("✅ Webhook enviado de forma assíncrona");
+                        $webhook_id = 'webhook_' . time() . '_' . wp_rand(1000, 9999);
+                        $this->send_definitive_failure_notification($webhook_data, $webhook_id, $max_tentativas);
+                    }
 
                     // Registra entrega pendente para monitoramento via Evolution API
                     global $hapvida_delivery_tracking;
@@ -196,12 +234,25 @@ trait FormHandlerTrait {
                     }
 
                 } else {
-                    $this->log("âš ï¸ URL do webhook não configurada para o grupo {$grupo}");
+                    error_log("HAPVIDA WEBHOOK: URL NAO CONFIGURADA para grupo {$grupo} - lead {$form_data['lead_id']} SEM WEBHOOK!");
+                    $this->log(">>> WEBHOOK SEM URL: grupo {$grupo} nao tem webhook configurado - lead {$form_data['lead_id']}");
+                    $this->save_webhook_entry($webhook_data, 'failed', "URL do webhook nao configurada para grupo {$grupo}");
+                    $webhook_id = 'webhook_' . time() . '_' . wp_rand(1000, 9999);
+                    $this->send_definitive_failure_notification($webhook_data, $webhook_id, 0);
                 }
 
+
             } catch (Exception $e) {
-                $this->log("âš ï¸ Erro no webhook: " . $e->getMessage());
+                error_log("HAPVIDA WEBHOOK: EXCECAO no webhook para lead " . (isset($form_data['lead_id']) ? $form_data['lead_id'] : 'unknown') . ": " . $e->getMessage());
+                $this->log(">>> WEBHOOK EXCECAO: " . $e->getMessage());
                 $webhook_success = false;
+
+                // Salva webhook entry com falha para rastreabilidade
+                if (isset($webhook_data)) {
+                    $this->save_webhook_entry($webhook_data, 'failed', 'Excecao: ' . $e->getMessage());
+                    $webhook_id = 'webhook_' . time() . '_' . wp_rand(1000, 9999);
+                    $this->send_definitive_failure_notification($webhook_data, $webhook_id, 0);
+                }
             }
 
             // *** NOVO: ENVIA DADOS PARA API LEADP3 (NÃO-BLOQUEANTE) ***
@@ -229,7 +280,7 @@ trait FormHandlerTrait {
                 'message' => 'Formulário processado com sucesso! Redirecionando...',
                 'redirect' => $whatsapp_url, // *** MANTÉM COMO ESTAVA ***
                 'whatsapp_url' => $whatsapp_url, // *** ADICIONA APENAS ESTA LINHA EXTRA ***
-                'webhook_status' => $webhook_success ? 'sent_async' : 'queued_for_retry',
+                'webhook_status' => $webhook_success ? 'sent_confirmed' : 'failed',
                 'business_hours' => $is_business_hours,
                 'tracking_enabled' => false,
                 'vendor_info' => array(
