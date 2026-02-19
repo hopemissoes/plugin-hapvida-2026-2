@@ -66,7 +66,7 @@ trait FormHandlerTrait {
             if ($this->is_form_processed($form_data)) {
                 error_log("HAPVIDA DUPLICATA BLOQUEADA: Telefone {$form_data['telefone']} - Nome: {$form_data['name']}");
                 $this->log(">>> DUPLICATA BLOQUEADA: Telefone {$form_data['telefone']}");
-                throw new Exception("Você já enviou uma solicitação recentemente. Aguarde alguns minutos antes de tentar novamente.");
+                throw new Exception("Este telefone já enviou um formulário recentemente. Aguarde alguns minutos antes de tentar novamente.");
             }
 
             // Marca como processado
@@ -320,47 +320,62 @@ trait FormHandlerTrait {
 
     private function is_form_processed($form_data)
     {
+        // Verificação por TELEFONE
         $telefone = isset($form_data['telefone']) ? $form_data['telefone'] : '';
-        if (empty($telefone)) {
-            return false; // Sem telefone, não tem como verificar
+        if (!empty($telefone)) {
+            $telefone_clean = preg_replace('/[^0-9]/', '', $telefone);
+            if (!empty($telefone_clean)) {
+                $phone_key = 'processed_phone_' . md5($telefone_clean);
+                if (get_transient($phone_key)) {
+                    error_log("HAPVIDA DUPLICATA: Telefone {$telefone} ja foi processado recentemente");
+                    return true;
+                }
+            }
         }
 
-        // *** NOVO: Normaliza o telefone (remove formatação) ***
-        $telefone_clean = preg_replace('/[^0-9]/', '', $telefone);
-
-        if (empty($telefone_clean)) {
-            return false;
+        // Verificação por NOME
+        $nome = isset($form_data['name']) ? $form_data['name'] : '';
+        if (!empty($nome)) {
+            $nome_clean = mb_strtolower(trim($nome), 'UTF-8');
+            $nome_clean = preg_replace('/\s+/', ' ', $nome_clean);
+            if (!empty($nome_clean)) {
+                $name_key = 'processed_name_' . md5($nome_clean);
+                if (get_transient($name_key)) {
+                    error_log("HAPVIDA DUPLICATA: Nome '{$nome}' ja foi processado recentemente");
+                    return true;
+                }
+            }
         }
 
-        // *** VERIFICAÇÃO POR TELEFONE ***
-        $processed_key = 'processed_phone_' . md5($telefone_clean);
-        $processed = get_transient($processed_key);
-
-        if ($processed) {
-            $this->log("Verificação duplicação: Telefone {$telefone} já foi processado recentemente");
-            return true;
-        }
-
-        $this->log("Verificação duplicação: Telefone {$telefone} OK para nova submissão");
         return false;
     }
 
     private function mark_form_as_processed($form_data)
     {
+        $ttl = 1800; // 30 minutos
+
+        // Marca TELEFONE como processado
         $telefone = isset($form_data['telefone']) ? $form_data['telefone'] : '';
         if (!empty($telefone)) {
-            // Normaliza telefone
             $telefone_clean = preg_replace('/[^0-9]/', '', $telefone);
-
             if (!empty($telefone_clean)) {
-                $processed_key = 'processed_phone_' . md5($telefone_clean);
-
-                // Bloqueia mesmo telefone por 30 minutos (1800 segundos)
-                set_transient($processed_key, time(), 1800);
-
-                error_log("HAPVIDA DUPLICATA: Telefone {$telefone} marcado como processado por 30 minutos");
+                $phone_key = 'processed_phone_' . md5($telefone_clean);
+                set_transient($phone_key, time(), $ttl);
             }
         }
+
+        // Marca NOME como processado
+        $nome = isset($form_data['name']) ? $form_data['name'] : '';
+        if (!empty($nome)) {
+            $nome_clean = mb_strtolower(trim($nome), 'UTF-8');
+            $nome_clean = preg_replace('/\s+/', ' ', $nome_clean);
+            if (!empty($nome_clean)) {
+                $name_key = 'processed_name_' . md5($nome_clean);
+                set_transient($name_key, time(), $ttl);
+            }
+        }
+
+        error_log("HAPVIDA DUPLICATA: Telefone {$telefone} e Nome '{$nome}' marcados como processados por 30 minutos");
     }
 
     private function extract_ages_from_request($params)
