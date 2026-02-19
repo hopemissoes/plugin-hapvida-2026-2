@@ -59,16 +59,20 @@ trait FormHandlerTrait {
                 }
             }
 
-            // Verifica se já foi processado (apenas log, NÃO bloqueia o webhook)
+            // Formata telefone ANTES da verificação de duplicata (para hash consistente)
+            $form_data['telefone'] = $this->format_phone_number($form_data['telefone']);
+
+            // Verifica se já foi processado - BLOQUEIA duplicatas
             if ($this->is_form_processed($form_data)) {
-                $this->log("AVISO DUPLICATA: Telefone {$form_data['telefone']} já enviado recentemente, mas webhook será enviado normalmente.");
+                error_log("HAPVIDA DUPLICATA BLOQUEADA: Telefone {$form_data['telefone']} - Nome: {$form_data['name']}");
+                $this->log(">>> DUPLICATA BLOQUEADA: Telefone {$form_data['telefone']}");
+                throw new Exception("Você já enviou uma solicitação recentemente. Aguarde alguns minutos antes de tentar novamente.");
             }
 
             // Marca como processado
             $this->mark_form_as_processed($form_data);
 
-            // Formata e processa dados básicos
-            $form_data['telefone'] = $this->format_phone_number($form_data['telefone']);
+            // Processa dados básicos
             $form_data['data'] = current_time('d/m/Y');
             $form_data['hora'] = current_time('H:i:s');
             $form_data['timestamp'] = current_time('timestamp');
@@ -351,10 +355,10 @@ trait FormHandlerTrait {
             if (!empty($telefone_clean)) {
                 $processed_key = 'processed_phone_' . md5($telefone_clean);
 
-                // CORREÇÃO: Tempo alterado para 3 minutos (180 segundos)
-                set_transient($processed_key, time(), 180);
+                // Bloqueia mesmo telefone por 30 minutos (1800 segundos)
+                set_transient($processed_key, time(), 1800);
 
-                $this->log("✅ Telefone {$telefone} marcado como processado por 3 minutos");
+                error_log("HAPVIDA DUPLICATA: Telefone {$telefone} marcado como processado por 30 minutos");
             }
         }
     }
