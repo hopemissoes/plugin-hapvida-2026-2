@@ -166,7 +166,7 @@ trait FormHandlerTrait {
                     error_log("HAPVIDA WEBHOOK: Iniciando envio para lead {$form_data['lead_id']} - grupo {$grupo}");
 
                     $webhook_body = json_encode($webhook_data);
-                    $max_tentativas = 3;
+                    $max_tentativas = 2;
                     $webhook_response = null;
                     $ultimo_erro = '';
 
@@ -174,7 +174,7 @@ trait FormHandlerTrait {
                         error_log("HAPVIDA WEBHOOK: Tentativa {$tentativa}/{$max_tentativas} para lead {$form_data['lead_id']}");
 
                         $webhook_config = array(
-                            'timeout' => 10,
+                            'timeout' => 5,
                             'blocking' => true,
                             'body' => $webhook_body,
                             'headers' => array('Content-Type' => 'application/json'),
