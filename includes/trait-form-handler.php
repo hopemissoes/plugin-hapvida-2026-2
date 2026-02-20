@@ -6,7 +6,7 @@ trait FormHandlerTrait {
     public function handle_form_submission($request)
     {
 
-        // DEBUG TEMPORÃRIO - REMOVER DEPOIS
+        // DEBUG TEMPORÁRIO - REMOVER DEPOIS
         error_reporting(E_ALL);
         ini_set('display_errors', 1);
         ini_set('log_errors', 1);
@@ -19,7 +19,7 @@ trait FormHandlerTrait {
             // Extração e validação dos dados (MANTENDO ESTRUTURA ORIGINAL)
             $params = $request->get_params();
 
-            // *** EXTRAÇÃO DOS DADOS DO FORMULÃRIO (MANTENDO ESTRUTURA ORIGINAL) ***
+            // *** EXTRAÇÃO DOS DADOS DO FORMULÁRIO (MANTENDO ESTRUTURA ORIGINAL) ***
             $form_data = array();
 
             // Verifica se os dados vêm de form_fields[] ou diretamente
@@ -76,7 +76,7 @@ trait FormHandlerTrait {
             $form_data['lead_id'] = $this->generate_unique_lead_id();
 
             // Log dos dados
-            $this->log("ðŸ“‹ DADOS DO FORMULÃRIO: ===== NOVA SUBMISSÃO =====");
+            $this->log("DADOS DO FORMULARIO: ===== NOVA SUBMISSAO =====");
             $this->log("Lead ID: {$form_data['lead_id']}");
             $this->log("Nome: {$form_data['name']}");
             $this->log("Telefone: {$form_data['telefone']}");
@@ -94,11 +94,11 @@ trait FormHandlerTrait {
                 $vendedor_por_url = $this->get_vendedor_por_url($form_data['pagina_origem']);
                 if ($vendedor_por_url) {
                     $roteamento_url = true;
-                    $this->log("🎯 Lead direcionado por ROTA ESPECÍFICA de URL");
+                    $this->log("Lead direcionado por ROTA ESPECIFICA de URL");
                 }
             }
 
-            $this->log("👤 Vendedor selecionado: {$vendedor['nome']} ({$vendedor['grupo']})");
+            $this->log("Vendedor selecionado: {$vendedor['nome']} ({$vendedor['grupo']})");
 
             // NOVO LOG: Mostra o ID do vendedor se existir
             if (isset($vendedor['vendedor_id']) && !empty($vendedor['vendedor_id'])) {
@@ -110,13 +110,12 @@ trait FormHandlerTrait {
 
             // Atualiza contadores
             $this->update_submission_counts();
-            //$this->update_ultimo_vendedor($vendedor);
 
-            // *** PROCESSAMENTO DO WEBHOOK - VERSÃO OTIMIZADA ***
+            // *** PROCESSAMENTO DO WEBHOOK - COM RETRY ROBUSTO ***
             $options = get_option($this->settings_option_name);
             $is_business_hours = $this->is_horario_comercial();
 
-            // Tenta enviar webhook com timeout reduzido
+            // Tenta enviar webhook
             $webhook_success = false;
 
             try {
@@ -130,7 +129,7 @@ trait FormHandlerTrait {
                 $webhook_data['grupo'] = isset($vendedor['grupo']) ? $vendedor['grupo'] : 'drv';
                 $webhook_data['atendente'] = $vendedor['nome'];
 
-                // *** NOVO: Adiciona informações sobre roteamento específico ***
+                // Adiciona informações sobre roteamento específico
                 $webhook_data['roteamento_especifico'] = $roteamento_url ? 'sim' : 'nao';
                 $webhook_data['tipo_roteamento'] = $roteamento_url ? 'url_consultor' : 'round_robin';
                 $webhook_data['url_origem'] = $form_data['pagina_origem'];
@@ -162,31 +161,69 @@ trait FormHandlerTrait {
                 }
 
                 if (!empty($webhook_url)) {
-                    // *** ENVIO ASSÃNCRONO COM TIMEOUT REDUZIDO ***
-                    $this->log("ðŸ“¤ Enviando webhook de forma assíncrona...");
+                    $this->log("Enviando webhook para lead {$form_data['lead_id']} - grupo {$grupo}");
+                    error_log("HAPVIDA WEBHOOK: Iniciando envio para lead {$form_data['lead_id']} - grupo {$grupo}");
 
-                    // LOG DO ID DO VENDEDOR NO WEBHOOK
                     if (isset($webhook_data['vendedor_id']) && !empty($webhook_data['vendedor_id'])) {
-                        $this->log("Webhook incluirá ID do vendedor: {$webhook_data['vendedor_id']}");
+                        $this->log("Webhook incluira ID do vendedor: {$webhook_data['vendedor_id']}");
                     }
 
-                    // Configuração otimizada com timeout reduzido
-                    $webhook_config = array(
-                        'timeout' => 5,  // Apenas 5 segundos
-                        'blocking' => false, // Não bloqueia
-                        'body' => json_encode($webhook_data),
-                        'headers' => array('Content-Type' => 'application/json'),
-                        'sslverify' => false
-                    );
+                    // *** ENVIO BLOQUEANTE COM RETRIES IMEDIATOS ***
+                    $max_immediate_attempts = 3;
+                    $last_error = '';
+                    $json_body = json_encode($webhook_data);
 
-                    // Envia sem esperar resposta
-                    wp_remote_post($webhook_url, $webhook_config);
+                    for ($attempt = 1; $attempt <= $max_immediate_attempts; $attempt++) {
+                        error_log("HAPVIDA WEBHOOK: Tentativa {$attempt}/{$max_immediate_attempts} para lead {$form_data['lead_id']}");
 
-                    // Salva para retry posterior se necessário
-                    $this->save_webhook_entry($webhook_data, 'pending', 'Enviado assincronamente');
+                        $response = wp_remote_post($webhook_url, array(
+                            'timeout' => 15,
+                            'blocking' => true,
+                            'body' => $json_body,
+                            'headers' => array('Content-Type' => 'application/json'),
+                            'sslverify' => false
+                        ));
 
-                    $webhook_success = true;
-                    $this->log("✅ Webhook enviado de forma assíncrona");
+                        if (is_wp_error($response)) {
+                            $last_error = $response->get_error_message();
+                            error_log("HAPVIDA WEBHOOK: ERRO tentativa {$attempt} - {$last_error}");
+                        } else {
+                            $code = wp_remote_retrieve_response_code($response);
+                            if ($code >= 200 && $code < 300) {
+                                $webhook_success = true;
+                                $this->log("Webhook enviado com sucesso na tentativa {$attempt}");
+                                error_log("HAPVIDA WEBHOOK: SUCESSO tentativa {$attempt} - HTTP {$code}");
+                                $this->save_webhook_entry($webhook_data, 'success', '', $code);
+                                break;
+                            } else {
+                                $last_error = "HTTP {$code}";
+                                error_log("HAPVIDA WEBHOOK: ERRO tentativa {$attempt} - HTTP {$code}");
+                            }
+                        }
+
+                        // Aguarda antes da próxima tentativa (backoff: 2s, 4s)
+                        if ($attempt < $max_immediate_attempts) {
+                            $wait = $attempt * 2;
+                            sleep($wait);
+                        }
+                    }
+
+                    // Se todas as tentativas imediatas falharam, salva na fila para retry posterior
+                    if (!$webhook_success) {
+                        error_log("HAPVIDA WEBHOOK: Falha nas {$max_immediate_attempts} tentativas imediatas para lead {$form_data['lead_id']}");
+                        $this->log("Webhook falhou {$max_immediate_attempts}x - salvando na fila de retry automatico");
+
+                        // Salva como PENDING (não failed!) para o cron reprocessar
+                        $this->save_webhook_entry_for_retry(
+                            $webhook_data,
+                            $webhook_url,
+                            $last_error,
+                            $max_immediate_attempts
+                        );
+
+                        // NÃO marca como lead perdido - o cron vai tentar novamente
+                        error_log("HAPVIDA WEBHOOK: Lead {$form_data['lead_id']} na fila de retry - NAO esta perdido ainda");
+                    }
 
                     // Registra entrega pendente para monitoramento via Evolution API
                     global $hapvida_delivery_tracking;
@@ -196,30 +233,25 @@ trait FormHandlerTrait {
                     }
 
                 } else {
-                    $this->log("âš ï¸ URL do webhook não configurada para o grupo {$grupo}");
+                    $this->log("URL do webhook nao configurada para o grupo {$grupo}");
                 }
 
             } catch (Exception $e) {
-                $this->log("âš ï¸ Erro no webhook: " . $e->getMessage());
+                $this->log("Erro no webhook: " . $e->getMessage());
                 $webhook_success = false;
             }
 
-            // *** NOVO: ENVIA DADOS PARA API LEADP3 (NÃO-BLOQUEANTE) ***
+            // *** ENVIA DADOS PARA API LEADP3 (NÃO-BLOQUEANTE) ***
             try {
-                // CORRIGIDO: Verifica se a classe existe antes de usar
-                // $leadp3_integration = get_leadp3_integration_instance();
                 $leadp3_integration = null;
                 if (class_exists('Formulario_Hapvida_LeadP3_Integration')) {
                     global $formulario_hapvida_leadp3;
                     $leadp3_integration = $formulario_hapvida_leadp3;
                 }
                 if ($leadp3_integration) {
-                    // Envio assíncrono - retorna instantaneamente
                     $leadp3_integration->send_to_leadp3($form_data, $vendedor);
-                    // â†‘ NÃO bloqueia - continua imediatamente
                 }
             } catch (Exception $e) {
-                // Apenas registra erro - não afeta formulário
                 error_log("LeadP3: " . $e->getMessage());
             }
 
@@ -227,9 +259,9 @@ trait FormHandlerTrait {
             $response = array(
                 'success' => true,
                 'message' => 'Formulário processado com sucesso! Redirecionando...',
-                'redirect' => $whatsapp_url, // *** MANTÉM COMO ESTAVA ***
-                'whatsapp_url' => $whatsapp_url, // *** ADICIONA APENAS ESTA LINHA EXTRA ***
-                'webhook_status' => $webhook_success ? 'sent_async' : 'queued_for_retry',
+                'redirect' => $whatsapp_url,
+                'whatsapp_url' => $whatsapp_url,
+                'webhook_status' => $webhook_success ? 'sent' : 'queued_for_retry',
                 'business_hours' => $is_business_hours,
                 'tracking_enabled' => false,
                 'vendor_info' => array(
@@ -247,14 +279,14 @@ trait FormHandlerTrait {
             );
 
             $execution_time = (microtime(true) - $start_time) * 1000;
-            $this->log("â±ï¸ Tempo de execução: {$execution_time}ms");
-            $this->log("ðŸ“‹ DADOS DO FORMULÃRIO: ===== FIM DA SUBMISSÃO =====");
+            $this->log("Tempo de execucao: " . round($execution_time, 2) . "ms");
+            $this->log("DADOS DO FORMULARIO: ===== FIM DA SUBMISSAO =====");
 
             return new WP_REST_Response($response, 200);
 
         } catch (Exception $e) {
             error_log("HAPVIDA ERROR: " . $e->getMessage());
-            $this->log("âŒ ERRO: " . $e->getMessage());
+            $this->log("ERRO: " . $e->getMessage());
 
             return new WP_REST_Response(array(
                 'success' => false,
@@ -267,26 +299,24 @@ trait FormHandlerTrait {
     {
         $telefone = isset($form_data['telefone']) ? $form_data['telefone'] : '';
         if (empty($telefone)) {
-            return false; // Sem telefone, não tem como verificar
+            return false;
         }
 
-        // *** NOVO: Normaliza o telefone (remove formatação) ***
         $telefone_clean = preg_replace('/[^0-9]/', '', $telefone);
 
         if (empty($telefone_clean)) {
             return false;
         }
 
-        // *** VERIFICAÇÃO POR TELEFONE ***
         $processed_key = 'processed_phone_' . md5($telefone_clean);
         $processed = get_transient($processed_key);
 
         if ($processed) {
-            $this->log("Verificação duplicação: Telefone {$telefone} já foi processado recentemente");
+            $this->log("Verificacao duplicacao: Telefone {$telefone} ja foi processado recentemente");
             return true;
         }
 
-        $this->log("Verificação duplicação: Telefone {$telefone} OK para nova submissão");
+        $this->log("Verificacao duplicacao: Telefone {$telefone} OK para nova submissao");
         return false;
     }
 
@@ -294,16 +324,12 @@ trait FormHandlerTrait {
     {
         $telefone = isset($form_data['telefone']) ? $form_data['telefone'] : '';
         if (!empty($telefone)) {
-            // Normaliza telefone
             $telefone_clean = preg_replace('/[^0-9]/', '', $telefone);
 
             if (!empty($telefone_clean)) {
                 $processed_key = 'processed_phone_' . md5($telefone_clean);
-
-                // CORREÇÃO: Tempo alterado para 3 minutos (180 segundos)
                 set_transient($processed_key, time(), 180);
-
-                $this->log("✅ Telefone {$telefone} marcado como processado por 3 minutos");
+                $this->log("Telefone {$telefone} marcado como processado por 3 minutos");
             }
         }
     }
@@ -312,17 +338,14 @@ trait FormHandlerTrait {
     {
         $ages = array();
 
-        // Verifica se ages vem como array direto
         if (isset($params['ages']) && is_array($params['ages'])) {
             return $params['ages'];
         }
 
-        // Verifica dentro de form_fields
         if (isset($params['form_fields']['ages']) && is_array($params['form_fields']['ages'])) {
             return $params['form_fields']['ages'];
         }
 
-        // Tenta extrair de campos individuais age_1, age_2, etc
         for ($i = 1; $i <= 10; $i++) {
             if (isset($params["age_$i"]) && !empty($params["age_$i"])) {
                 $ages[] = $params["age_$i"];
@@ -331,7 +354,6 @@ trait FormHandlerTrait {
             }
         }
 
-        // Se ainda não tem idades, tenta campo único 'idade'
         if (empty($ages)) {
             if (isset($params['idade']) && !empty($params['idade'])) {
                 $ages[] = $params['idade'];
@@ -345,10 +367,8 @@ trait FormHandlerTrait {
 
     private function format_phone_number($phone)
     {
-        // Remove todos os caracteres não numéricos
         $phone = preg_replace('/[^0-9]/', '', $phone);
 
-        // Se tem 11 dígitos (com DDD e 9 dígito)
         if (strlen($phone) == 11) {
             return sprintf(
                 '(%s) %s-%s',
@@ -356,26 +376,20 @@ trait FormHandlerTrait {
                 substr($phone, 2, 5),
                 substr($phone, 7)
             );
-        }
-        // Se tem 10 dígitos (com DDD sem 9 dígito)
-        elseif (strlen($phone) == 10) {
+        } elseif (strlen($phone) == 10) {
             return sprintf(
                 '(%s) %s-%s',
                 substr($phone, 0, 2),
                 substr($phone, 2, 4),
                 substr($phone, 6)
             );
-        }
-        // Se tem 9 dígitos (celular sem DDD)
-        elseif (strlen($phone) == 9) {
+        } elseif (strlen($phone) == 9) {
             return sprintf(
                 '%s-%s',
                 substr($phone, 0, 5),
                 substr($phone, 5)
             );
-        }
-        // Se tem 8 dígitos (fixo sem DDD)
-        elseif (strlen($phone) == 8) {
+        } elseif (strlen($phone) == 8) {
             return sprintf(
                 '%s-%s',
                 substr($phone, 0, 4),
@@ -383,13 +397,11 @@ trait FormHandlerTrait {
             );
         }
 
-        // Retorna o telefone original se não se encaixa em nenhum formato
         return $phone;
     }
 
     private function validate_brazilian_phone($telefone)
     {
-        // Remove todos os caracteres não numéricos
         $clean_phone = preg_replace('/[^0-9]/', '', $telefone);
 
         $result = array(
@@ -402,11 +414,9 @@ trait FormHandlerTrait {
 
         $length = strlen($clean_phone);
 
-        // Aceita 10 ou 11 dígitos
         if ($length >= 10 && $length <= 11) {
             $ddd = substr($clean_phone, 0, 2);
 
-            // DDD deve estar entre 11 e 99
             if (intval($ddd) >= 11 && intval($ddd) <= 99) {
                 $result['valid'] = true;
 
@@ -418,7 +428,7 @@ trait FormHandlerTrait {
                         substr($clean_phone, 2, 4),
                         substr($clean_phone, 6)
                     );
-                } else { // 11 dígitos
+                } else {
                     $result['type'] = 'celular';
                     $result['formatted'] = sprintf(
                         '(%s) %s-%s',
@@ -428,55 +438,25 @@ trait FormHandlerTrait {
                     );
                 }
             } else {
-                $result['error_message'] = 'DDD inválido. Use um DDD entre 11 e 99. Ex: (11) 1234-5678';
+                $result['error_message'] = 'DDD invalido. Use um DDD entre 11 e 99.';
             }
         } elseif ($length === 0) {
-            $result['error_message'] = 'Por favor, digite seu número de telefone com DDD';
+            $result['error_message'] = 'Por favor, digite seu numero de telefone com DDD';
         } elseif ($length < 10) {
             $result['error_message'] = sprintf(
-                'Número muito curto (%d dígitos). Digite DDD + número (mínimo 10 dígitos)',
+                'Numero muito curto (%d digitos). Digite DDD + numero (minimo 10 digitos)',
                 $length
             );
         } elseif ($length > 11) {
             $result['error_message'] = sprintf(
-                'Número muito longo (%d dígitos). Máximo: 11 dígitos com DDD',
+                'Numero muito longo (%d digitos). Maximo: 11 digitos com DDD',
                 $length
             );
         } else {
-            $result['error_message'] = 'Formato inválido. Use: (DD) XXXX-XXXX';
+            $result['error_message'] = 'Formato invalido. Use: (DD) XXXX-XXXX';
         }
 
         return $result;
-    }
-
-    public function test_phone_validation()
-    {
-        $test_phones = array(
-            '11999887766',           // Válido - celular
-            '(11) 99988-7766',       // Válido - celular formatado
-            '11987654321',           // Válido - celular
-            '1133334444',            // Válido - fixo
-            '(11) 3333-4444',        // Válido - fixo formatado
-            '119988776',             // Inválido - muito curto
-            '21987654321',           // Válido - RJ celular
-            '11887654321',           // Inválido - fixo com 11 dígitos
-            '11099887766',           // Inválido - começa com 0
-            '11199887766',           // Inválido - começa com 1
-            '09987654321',           // Inválido - DDD inválido
-            '119999999999',          // Inválido - muito longo
-        );
-
-        $this->log("=== TESTE DE VALIDAÇÃO DE TELEFONES ===");
-
-        foreach ($test_phones as $phone) {
-            $result = $this->validate_brazilian_phone($phone);
-            $status = $result['valid'] ? '✅ VÃLIDO' : 'âŒ INVÃLIDO';
-            $message = $result['valid'] ?
-                "Tipo: {$result['type']}, Formatado: {$result['formatted']}" :
-                "Erro: {$result['error_message']}";
-
-            $this->log("Teste: {$phone} -> {$status} - {$message}");
-        }
     }
 
     private function update_ultimo_vendedor($vendedor)
@@ -489,12 +469,11 @@ trait FormHandlerTrait {
 
         update_option($this->ultimo_vendedor_option_name, $ultimo_vendedor_info);
 
-        $this->log("👤 Último vendedor atualizado: {$vendedor['nome']}");
+        $this->log("Ultimo vendedor atualizado: {$vendedor['nome']}");
     }
 
     private function update_submission_counts()
     {
-        // Atualiza contador diário
         $daily_submissions = get_option($this->daily_submissions_option, array());
         $today = current_time('Y-m-d');
 
@@ -505,7 +484,6 @@ trait FormHandlerTrait {
 
         update_option($this->daily_submissions_option, $daily_submissions);
 
-        // Atualiza contador mensal
         $monthly_submissions = get_option($this->monthly_submissions_option, array());
         $current_month = current_time('Y-m');
 
@@ -516,6 +494,6 @@ trait FormHandlerTrait {
 
         update_option($this->monthly_submissions_option, $monthly_submissions);
 
-        $this->log("ðŸ“Š Contadores atualizados - Diário: {$daily_submissions[$today]}, Mensal: {$monthly_submissions[$current_month]}");
+        $this->log("Contadores atualizados - Diario: {$daily_submissions[$today]}, Mensal: {$monthly_submissions[$current_month]}");
     }
 }
