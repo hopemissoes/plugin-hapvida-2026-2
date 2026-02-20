@@ -138,4 +138,23 @@ trait AutoActivateTrait {
             'enabled' => $enabled
         ));
     }
+
+    public function ajax_save_seu_souza_daily_limit()
+    {
+        check_ajax_referer('save_vendedores', 'security');
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error('Permissão negada');
+        }
+
+        $limit = isset($_POST['limit']) ? intval($_POST['limit']) : 30;
+        $limit = max(5, $limit);
+
+        update_option('hapvida_seu_souza_daily_limit', $limit);
+        $this->log("Limite diário Seu Souza atualizado para: {$limit}");
+
+        wp_send_json_success(array(
+            'message' => 'Limite atualizado para ' . $limit,
+            'limit' => $limit
+        ));
+    }
 }

@@ -130,6 +130,9 @@ class Formulario_Hapvida
         // AJAX para toggle da auto-ativação
         add_action('wp_ajax_hapvida_toggle_auto_activate_seu_souza', array($this, 'ajax_toggle_auto_activate_seu_souza'));
 
+        // AJAX para salvar limite diário Seu Souza (admin)
+        add_action('wp_ajax_hapvida_save_seu_souza_daily_limit', array($this, 'ajax_save_seu_souza_daily_limit'));
+
         // Agenda os crons se a funcionalidade estiver ativa
         $this->schedule_auto_activate_seu_souza();
 

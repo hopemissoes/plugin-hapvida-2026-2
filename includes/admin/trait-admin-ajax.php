@@ -154,6 +154,45 @@ trait AdminAjaxTrait {
         wp_send_json_success(array('vendors' => $formatted_vendors));
     }
 
+    // Toggle auto-ativação Seu Souza via frontend (sem login)
+    public function ajax_toggle_auto_activate_seu_souza_frontend()
+    {
+        $enabled = isset($_POST['enabled']) && $_POST['enabled'] === 'true';
+        update_option('hapvida_auto_activate_seu_souza', $enabled);
+
+        // Re-agenda crons via instância principal
+        $instance = isset($GLOBALS['formulario_hapvida']) ? $GLOBALS['formulario_hapvida'] : null;
+        if ($instance && method_exists($instance, 'schedule_auto_activate_seu_souza')) {
+            $instance->schedule_auto_activate_seu_souza();
+        }
+
+        if ($enabled && $instance) {
+            if (method_exists($instance, 'auto_activate_seu_souza')) {
+                $instance->auto_activate_seu_souza();
+                $instance->auto_deactivate_seu_souza();
+            }
+        }
+
+        wp_send_json_success(array(
+            'message' => $enabled ? 'Auto-ativação ATIVADA' : 'Auto-ativação DESATIVADA',
+            'enabled' => $enabled
+        ));
+    }
+
+    // Atualizar limite diário Seu Souza via frontend (sem login)
+    public function ajax_update_seu_souza_daily_limit_frontend()
+    {
+        $limit = isset($_POST['limit']) ? intval($_POST['limit']) : 30;
+        $limit = max(5, $limit);
+
+        update_option('hapvida_seu_souza_daily_limit', $limit);
+
+        wp_send_json_success(array(
+            'message' => 'Limite atualizado para ' . $limit,
+            'limit' => $limit
+        ));
+    }
+
     // NOVA FUNÇÃO: Toggle vendedor status para frontend (sem login)
     public function ajax_toggle_vendor_status_frontend()
     {

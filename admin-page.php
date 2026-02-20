@@ -100,6 +100,14 @@ class Formulario_Hapvida_Admin
         add_action('wp_ajax_get_vendors_list_frontend', array($this, 'ajax_get_vendors_list_frontend'));
         add_action('wp_ajax_nopriv_get_vendors_list_frontend', array($this, 'ajax_get_vendors_list_frontend'));
 
+        // Toggle auto-ativação Seu Souza (frontend sem login)
+        add_action('wp_ajax_toggle_auto_activate_seu_souza_frontend', array($this, 'ajax_toggle_auto_activate_seu_souza_frontend'));
+        add_action('wp_ajax_nopriv_toggle_auto_activate_seu_souza_frontend', array($this, 'ajax_toggle_auto_activate_seu_souza_frontend'));
+
+        // Atualizar limite diário Seu Souza (frontend sem login)
+        add_action('wp_ajax_update_seu_souza_daily_limit_frontend', array($this, 'ajax_update_seu_souza_daily_limit_frontend'));
+        add_action('wp_ajax_nopriv_update_seu_souza_daily_limit_frontend', array($this, 'ajax_update_seu_souza_daily_limit_frontend'));
+
         add_action('wp_ajax_get_delivery_stats', array($this, 'ajax_get_delivery_stats'));
         add_action('wp_ajax_nopriv_get_delivery_stats', array($this, 'ajax_get_delivery_stats'));
 

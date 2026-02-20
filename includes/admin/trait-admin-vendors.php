@@ -45,6 +45,41 @@ trait AdminVendorsTrait {
                 </div>
             </div>
 
+            <!-- Toggle Auto-Ativação Seu Souza (Frontend) -->
+            <?php $auto_activate_enabled_fe = get_option('hapvida_auto_activate_seu_souza', false); ?>
+            <?php $daily_limit_fe = get_option('hapvida_seu_souza_daily_limit', 30); ?>
+            <div class="vm-auto-activate-box">
+                <div class="vm-auto-activate-row">
+                    <div class="vm-auto-activate-info">
+                        <span class="vm-auto-activate-title">Auto-Ativação Seu Souza</span>
+                        <span class="vm-auto-activate-desc">Dias úteis 08h-12h</span>
+                    </div>
+                    <div class="vm-auto-activate-toggle">
+                        <label class="vm-switch">
+                            <input type="checkbox" id="auto-activate-toggle-fe"
+                                <?php checked($auto_activate_enabled_fe, true); ?>>
+                            <span class="vm-switch-track" style="background-color: <?php echo $auto_activate_enabled_fe ? '#22c55e' : '#d1d5db'; ?>;">
+                                <span class="vm-switch-thumb" style="left: <?php echo $auto_activate_enabled_fe ? '22px' : '2px'; ?>;"></span>
+                            </span>
+                        </label>
+                        <span id="auto-activate-label-fe" style="font-size:12px; font-weight:600; color: <?php echo $auto_activate_enabled_fe ? '#22c55e' : '#94a3b8'; ?>;">
+                            <?php echo $auto_activate_enabled_fe ? 'ON' : 'OFF'; ?>
+                        </span>
+                    </div>
+                </div>
+                <div class="vm-daily-limit-row">
+                    <div class="vm-daily-limit-info">
+                        <span class="vm-auto-activate-title">Limite Diário (Seu Souza)</span>
+                        <span class="vm-auto-activate-desc">Desativa ao atingir este número de leads</span>
+                    </div>
+                    <div class="vm-daily-limit-control">
+                        <button class="vm-limit-btn vm-limit-minus" id="limit-minus-btn">-</button>
+                        <span class="vm-limit-value" id="daily-limit-value-fe"><?php echo intval($daily_limit_fe); ?></span>
+                        <button class="vm-limit-btn vm-limit-plus" id="limit-plus-btn">+</button>
+                    </div>
+                </div>
+            </div>
+
             <div class="vendors-list-container">
                 <div class="vendors-group" id="vendors-drv">
                     <div class="vm-group-header">
@@ -72,6 +107,120 @@ trait AdminVendorsTrait {
             /* ======================== VENDORS MANAGEMENT - MODERN MINIMAL ======================== */
             .vendors-management-section {
                 margin: 20px 0;
+            }
+
+            /* Auto-Activate Box (Frontend) */
+            .vm-auto-activate-box {
+                background: #f8f9fb;
+                border: 1px solid #e2e8f0;
+                border-radius: 12px;
+                padding: 16px 20px;
+                margin-bottom: 24px;
+            }
+            .vm-auto-activate-row,
+            .vm-daily-limit-row {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 12px;
+            }
+            .vm-daily-limit-row {
+                margin-top: 14px;
+                padding-top: 14px;
+                border-top: 1px solid #e2e8f0;
+            }
+            .vm-auto-activate-info,
+            .vm-daily-limit-info {
+                display: flex;
+                flex-direction: column;
+                gap: 2px;
+            }
+            .vm-auto-activate-title {
+                font-weight: 600;
+                font-size: 13px;
+                color: #1e293b;
+            }
+            .vm-auto-activate-desc {
+                font-size: 11px;
+                color: #94a3b8;
+            }
+            .vm-auto-activate-toggle {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+            }
+            .vm-switch {
+                position: relative;
+                display: inline-block;
+                cursor: pointer;
+            }
+            .vm-switch input {
+                opacity: 0;
+                width: 0;
+                height: 0;
+                position: absolute;
+            }
+            .vm-switch-track {
+                display: block;
+                width: 44px;
+                height: 24px;
+                border-radius: 12px;
+                transition: background-color 0.3s;
+                position: relative;
+            }
+            .vm-switch-thumb {
+                display: block;
+                width: 20px;
+                height: 20px;
+                background: white;
+                border-radius: 50%;
+                position: absolute;
+                top: 2px;
+                transition: left 0.3s;
+                box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+            }
+            .vm-daily-limit-control {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+            }
+            .vm-limit-btn {
+                width: 30px;
+                height: 30px;
+                border-radius: 8px;
+                border: 1px solid #e2e8f0;
+                background: white;
+                font-size: 16px;
+                font-weight: 700;
+                color: #475569;
+                cursor: pointer;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                transition: all 0.2s;
+            }
+            .vm-limit-btn:hover {
+                background: #f1f5f9;
+                border-color: #cbd5e1;
+            }
+            .vm-limit-value {
+                font-size: 18px;
+                font-weight: 700;
+                color: #1e293b;
+                min-width: 36px;
+                text-align: center;
+            }
+            @media (max-width: 480px) {
+                .vm-auto-activate-row,
+                .vm-daily-limit-row {
+                    flex-direction: column;
+                    align-items: flex-start;
+                    gap: 8px;
+                }
+                .vm-auto-activate-toggle,
+                .vm-daily-limit-control {
+                    align-self: flex-end;
+                }
             }
 
             /* Stats Row */
@@ -463,6 +612,78 @@ trait AdminVendorsTrait {
                         $btn.find('i').removeClass('fa-spin');
                         $btn.prop('disabled', false);
                     }, 1500);
+                });
+
+                // Toggle auto-ativação Seu Souza (frontend)
+                $('#auto-activate-toggle-fe').on('change', function () {
+                    var $toggle = $(this);
+                    var enabled = $toggle.is(':checked');
+                    var $track = $toggle.next('.vm-switch-track');
+                    var $thumb = $track.find('.vm-switch-thumb');
+                    var $label = $('#auto-activate-label-fe');
+
+                    $track.css('background-color', enabled ? '#22c55e' : '#d1d5db');
+                    $thumb.css('left', enabled ? '22px' : '2px');
+                    $label.text(enabled ? 'ON' : 'OFF');
+                    $label.css('color', enabled ? '#22c55e' : '#94a3b8');
+
+                    $.ajax({
+                        url: vendorsAjaxUrl,
+                        type: 'POST',
+                        dataType: 'json',
+                        data: {
+                            action: 'toggle_auto_activate_seu_souza_frontend',
+                            enabled: enabled ? 'true' : 'false'
+                        },
+                        success: function (response) {
+                            if (response && response.success) {
+                                loadVendorsList();
+                            }
+                        },
+                        error: function () {
+                            $toggle.prop('checked', !enabled);
+                            $track.css('background-color', !enabled ? '#22c55e' : '#d1d5db');
+                            $thumb.css('left', !enabled ? '22px' : '2px');
+                            $label.text(!enabled ? 'ON' : 'OFF');
+                            $label.css('color', !enabled ? '#22c55e' : '#94a3b8');
+                            alert('Erro ao salvar. Tente novamente.');
+                        }
+                    });
+                });
+
+                // Controle do limite diário (frontend)
+                function updateDailyLimit(newValue) {
+                    $.ajax({
+                        url: vendorsAjaxUrl,
+                        type: 'POST',
+                        dataType: 'json',
+                        data: {
+                            action: 'update_seu_souza_daily_limit_frontend',
+                            limit: newValue
+                        },
+                        success: function (response) {
+                            if (response && response.success) {
+                                $('#daily-limit-value-fe').text(response.data.limit);
+                            }
+                        },
+                        error: function () {
+                            alert('Erro ao salvar limite.');
+                        }
+                    });
+                }
+
+                $('#limit-plus-btn').on('click', function () {
+                    var current = parseInt($('#daily-limit-value-fe').text()) || 30;
+                    var newVal = current + 5;
+                    $('#daily-limit-value-fe').text(newVal);
+                    updateDailyLimit(newVal);
+                });
+
+                $('#limit-minus-btn').on('click', function () {
+                    var current = parseInt($('#daily-limit-value-fe').text()) || 30;
+                    var newVal = Math.max(5, current - 5);
+                    $('#daily-limit-value-fe').text(newVal);
+                    updateDailyLimit(newVal);
                 });
 
                 // Carrega vendedores ao iniciar

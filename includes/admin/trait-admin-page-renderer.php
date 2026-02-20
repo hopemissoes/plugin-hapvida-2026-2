@@ -672,6 +672,63 @@ trait AdminPageRendererTrait {
                                     })(jQuery);
                                     </script>
 
+                                    <!-- LIMITE DIÁRIO SEU SOUZA -->
+                                    <?php $daily_limit_admin = get_option('hapvida_seu_souza_daily_limit', 30); ?>
+                                    <div class="hapvida-auto-activate-box" style="margin-top: 15px;">
+                                        <div class="hapvida-auto-activate-info">
+                                            <h3 class="hapvida-auto-activate-title">
+                                                <span class="dashicons dashicons-warning"></span>
+                                                Limite Diário Seu Souza
+                                            </h3>
+                                            <p class="hapvida-auto-activate-desc">
+                                                Quando a contagem diária de submissões atingir este limite, os vendedores do grupo <strong>Seu Souza</strong> serão <strong>desativados automaticamente</strong>.
+                                            </p>
+                                        </div>
+                                        <div style="display: flex; align-items: center; gap: 10px; margin-top: 10px;">
+                                            <label for="seu-souza-daily-limit-input" style="font-weight: 600; color: #1e293b;">Limite:</label>
+                                            <input type="number" id="seu-souza-daily-limit-input"
+                                                value="<?php echo intval($daily_limit_admin); ?>"
+                                                min="5" step="1"
+                                                style="width: 80px; padding: 6px 10px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 16px; font-weight: 700; text-align: center;">
+                                            <button id="save-daily-limit-btn" class="button button-primary" style="padding: 4px 16px;">Salvar</button>
+                                            <span id="daily-limit-save-status" style="font-size: 12px; color: #22c55e; display: none;">Salvo!</span>
+                                        </div>
+                                    </div>
+
+                                    <script>
+                                    (function($) {
+                                        $('#save-daily-limit-btn').on('click', function() {
+                                            var limit = parseInt($('#seu-souza-daily-limit-input').val()) || 30;
+                                            if (limit < 5) limit = 5;
+                                            $('#seu-souza-daily-limit-input').val(limit);
+
+                                            var $btn = $(this);
+                                            $btn.prop('disabled', true).text('Salvando...');
+
+                                            $.ajax({
+                                                url: ajaxurl,
+                                                method: 'POST',
+                                                data: {
+                                                    action: 'hapvida_save_seu_souza_daily_limit',
+                                                    security: $('#vendedores_nonce').val() || $('input[name="vendedores_nonce"]').val(),
+                                                    limit: limit
+                                                },
+                                                success: function(response) {
+                                                    if (response.success) {
+                                                        $('#daily-limit-save-status').fadeIn().delay(2000).fadeOut();
+                                                    }
+                                                },
+                                                error: function() {
+                                                    alert('Erro ao salvar limite.');
+                                                },
+                                                complete: function() {
+                                                    $btn.prop('disabled', false).text('Salvar');
+                                                }
+                                            });
+                                        });
+                                    })(jQuery);
+                                    </script>
+
                                     <!-- Google Sheets: area de configuracao -->
                                     <?php Formulario_Hapvida_Google_Sheets::render_config_area(); ?>
 

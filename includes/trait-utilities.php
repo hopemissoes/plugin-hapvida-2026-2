@@ -232,7 +232,36 @@ trait UtilitiesTrait {
         }
         update_option($this->monthly_submissions_option, $monthly_submissions);
 
-        $this->log("ðŸ“Š Contagem mensal atualizada: {$monthly_submissions[$month]} submissões em {$month}");
+        $this->log("ðŸ"Š Contagem mensal atualizada: {$monthly_submissions[$month]} submissões em {$month}");
+
+        // Verifica limite diário para auto-desativação Seu Souza
+        $daily_limit = intval(get_option('hapvida_seu_souza_daily_limit', 30));
+        if ($daily_limit > 0 && $daily_submissions[$today] >= $daily_limit) {
+            $this->deactivate_seu_souza_by_daily_limit($daily_submissions[$today], $daily_limit);
+        }
+    }
+
+    /**
+     * Desativa vendedores Seu Souza quando o limite diário é atingido
+     */
+    private function deactivate_seu_souza_by_daily_limit($current_count, $limit)
+    {
+        $vendedores = get_option($this->vendedores_option, array('drv' => array(), 'seu_souza' => array()));
+        if (!isset($vendedores['seu_souza']) || !is_array($vendedores['seu_souza'])) return;
+
+        $changed = false;
+        foreach ($vendedores['seu_souza'] as &$v) {
+            if (is_array($v) && isset($v['status']) && $v['status'] === 'ativo') {
+                $v['status'] = 'inativo';
+                $changed = true;
+            }
+        }
+        unset($v);
+
+        if ($changed) {
+            update_option($this->vendedores_option, $vendedores);
+            $this->log("LIMITE DIARIO: Vendedores Seu Souza DESATIVADOS (contagem {$current_count} atingiu limite de {$limit})");
+        }
     }
 
     private function get_daily_submission_count()
