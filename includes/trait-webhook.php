@@ -5,7 +5,7 @@ trait WebhookTrait {
     private function save_webhook_entry($webhook_data, $status = 'pending', $error_message = '', $response_code = null)
     {
         try {
-            error_log("ðŸ’¾ [DEBUG] Salvando webhook entry - Status: $status");
+            error_log("[DEBUG] Salvando webhook entry - Status: $status");
 
             $failed_webhooks = get_option($this->failed_webhooks_option, array());
 
@@ -195,7 +195,7 @@ trait WebhookTrait {
                     </tr>
                 </table>
 
-                <h2>ðŸ‘¨â€ðŸ’¼ Vendedor Designado</h2>
+                <h2>Vendedor Designado</h2>
                 <table class="info-table">
                     <tr>
                         <th>Nome:</th>
@@ -215,7 +215,7 @@ trait WebhookTrait {
                     </tr>
                 </table>
 
-                <h3>ðŸ”§ Informações Técnicas</h3>
+                <h3>Informações Técnicas</h3>
                 <table class="info-table">
                     <tr>
                         <th>ID do Webhook:</th>
@@ -244,13 +244,13 @@ trait WebhookTrait {
                 </table>
 
                 <div class="urgent">
-                    <strong>ðŸ“ž AÇÃO IMEDIATA NECESSÃRIA!</strong><br>
+                    <strong>AÇÃO IMEDIATA NECESSÃRIA!</strong><br>
                     Este cliente demonstrou interesse e está aguardando contato.<br>
                     <strong>LIGUE AGORA: ' . esc_html($cliente_telefone) . '</strong>
                 </div>
 
                 <div class="actions-list">
-                    <h3>ðŸ“‹ AÇÃ•ES NECESSÃRIAS:</h3>
+                    <h3>AÇÃ•ES NECESSÃRIAS:</h3>
                     <ul>
                         <li><strong>1. CONTATO IMEDIATO:</strong> Ligue para <strong>' . esc_html($cliente_telefone) . '</strong> agora mesmo</li>
                         <li><strong>2. WhatsApp Direto:</strong> <a href="https://wa.me/' . preg_replace('/[^0-9]/', '', $cliente_telefone) . '?text=Olá ' . urlencode($cliente_nome) . ', sou ' . urlencode($vendedor_nome) . ' da Hapvida. Vi que você demonstrou interesse em nossos planos. Posso ajudar?" target="_blank">Clique aqui para abrir WhatsApp com mensagem pronta</a></li>
@@ -261,7 +261,7 @@ trait WebhookTrait {
                 </div>
 
                 <div class="warning">
-                    <strong>ðŸ’¡ IMPORTANTE:</strong> Este email indica uma falha crítica no sistema.
+                    <strong>IMPORTANTE:</strong> Este email indica uma falha crítica no sistema.
                     O webhook falhou completamente após múltiplas tentativas. É essencial:
                     <ul>
                         <li>Contatar o cliente imediatamente</li>
@@ -290,7 +290,7 @@ trait WebhookTrait {
             $email_sent = wp_mail($notification_email, $subject, $message, $headers);
 
             if ($email_sent) {
-                $this->log("ðŸ“§ Email de falha definitiva enviado para: {$notification_email}");
+                $this->log("Email de falha definitiva enviado para: {$notification_email}");
             } else {
                 $this->log("âŒ ERRO ao enviar email de falha definitiva");
                 error_log("HAPVIDA CRITICAL: Falha ao enviar email de notificação para {$notification_email}");
@@ -312,7 +312,7 @@ trait WebhookTrait {
             $error_message = $response->get_error_message();
             $error_code = $response->get_error_code();
 
-            $this->log("ðŸ” Analisando erro WP_Error - Código: {$error_code}, Mensagem: {$error_message}");
+            $this->log("Analisando erro WP_Error - Código: {$error_code}, Mensagem: {$error_message}");
 
             // *** LISTA EXPANDIDA: Padrões de erro que devem acionar retry ***
             $retry_patterns = array(
@@ -401,7 +401,7 @@ trait WebhookTrait {
         $response_code = wp_remote_retrieve_response_code($response);
 
         if ($response_code) {
-            $this->log("ðŸ” Analisando código HTTP: {$response_code}");
+            $this->log("Analisando código HTTP: {$response_code}");
 
             // Lista de códigos HTTP que devem acionar retry
             $retry_codes = array(

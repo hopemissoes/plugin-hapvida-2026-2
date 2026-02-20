@@ -46,7 +46,7 @@ trait AjaxHandlersTrait {
             }
         }
 
-        $debug_info .= "\nðŸ“Š RESUMO: {$valid_configs}/{$total_configs} configurações válidas\n\n";
+        $debug_info .= "\nRESUMO: {$valid_configs}/{$total_configs} configurações válidas\n\n";
 
         // Valida configurações obrigatórias
         $required_drv = isset($options['webhook_url_drv']) && !empty(trim($options['webhook_url_drv']));
@@ -90,7 +90,7 @@ trait AjaxHandlersTrait {
 
         // Monta informações de debug
         $debug_info = "=== DEBUG DO LEAD {$lead_id} ===\n\n";
-        $debug_info .= "ðŸ“‹ DADOS DO LEAD:\n";
+        $debug_info .= "DADOS DO LEAD:\n";
         $debug_info .= "   - ID: {$lead['lead_id']}\n";
         $debug_info .= "   - Vendedor atual: {$lead['vendedor_nome']}\n";
         $debug_info .= "   - Grupo: {$lead['grupo']}\n";
@@ -103,7 +103,7 @@ trait AjaxHandlersTrait {
         $options = get_option('formulario_hapvida_settings');
         $grupo = $lead['grupo'];
 
-        $debug_info .= "ðŸ”§ CONFIGURAÇÃ•ES DE WEBHOOK:\n";
+        $debug_info .= "CONFIGURAÇÃ•ES DE WEBHOOK:\n";
 
         if ($grupo === 'drv') {
             $webhook_url = isset($options['webhook_url_drv']) ? $options['webhook_url_drv'] : '';

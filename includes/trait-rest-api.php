@@ -67,7 +67,7 @@ trait RestApiTrait {
     {
         $start_time = microtime(true);
 
-        $this->log("=== ðŸ• CRON EXTERNO EXECUTADO ===");
+        $this->log("=== CRON EXTERNO EXECUTADO ===");
         $this->log("Horário: " . current_time('d/m/Y H:i:s'));
         $this->log("IP do cliente: " . $this->get_client_ip());
 
@@ -136,7 +136,7 @@ trait RestApiTrait {
     {
         $lead_id = $request->get_param('id');
 
-        error_log("ðŸ” [REST API] Buscando detalhes do lead: " . $lead_id);
+        error_log("[REST API] Buscando detalhes do lead: " . $lead_id);
 
         $all_webhooks = get_option($this->failed_webhooks_option, array());
 

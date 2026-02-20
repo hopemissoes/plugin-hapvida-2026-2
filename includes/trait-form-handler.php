@@ -80,7 +80,7 @@ trait FormHandlerTrait {
             $form_data['lead_id'] = $this->generate_unique_lead_id();
 
             // Log dos dados
-            $this->log("ðŸ“‹ DADOS DO FORMULÃRIO: ===== NOVA SUBMISSÃO =====");
+            $this->log("DADOS DO FORMULÃRIO: ===== NOVA SUBMISSÃO =====");
             $this->log("Lead ID: {$form_data['lead_id']}");
             $this->log("Nome: {$form_data['name']}");
             $this->log("Telefone: {$form_data['telefone']}");
@@ -303,7 +303,7 @@ trait FormHandlerTrait {
 
             $execution_time = (microtime(true) - $start_time) * 1000;
             $this->log("â±ï¸ Tempo de execução: {$execution_time}ms");
-            $this->log("ðŸ“‹ DADOS DO FORMULÃRIO: ===== FIM DA SUBMISSÃO =====");
+            $this->log("DADOS DO FORMULÃRIO: ===== FIM DA SUBMISSÃO =====");
 
             return new WP_REST_Response($response, 200);
 
@@ -586,6 +586,6 @@ trait FormHandlerTrait {
 
         update_option($this->monthly_submissions_option, $monthly_submissions);
 
-        $this->log("ðŸ“Š Contadores atualizados - Diário: {$daily_submissions[$today]}, Mensal: {$monthly_submissions[$current_month]}");
+        $this->log("Contadores atualizados - Diário: {$daily_submissions[$today]}, Mensal: {$monthly_submissions[$current_month]}");
     }
 }

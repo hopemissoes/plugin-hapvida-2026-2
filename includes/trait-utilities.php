@@ -8,7 +8,7 @@ trait UtilitiesTrait {
         // TEMPORARIO: Loga tudo para debug
         // Filtra para logar apenas dados de leads e mensagens de erro
         if (
-            strpos($message, 'ðŸ“¥ Dados recebidos:') === 0 ||
+            strpos($message, 'Dados recebidos:') !== false ||
             strpos($message, 'âŒ') === 0 ||
             strpos($message, 'âš ï¸') === 0
         ) {
@@ -133,12 +133,12 @@ trait UtilitiesTrait {
         // Define o timezone padrão do PHP para corresponder ao WordPress
         if (!empty($timezone_string)) {
             date_default_timezone_set($timezone_string);
-            $this->log("ðŸ• Timezone configurado: " . $timezone_string);
+            $this->log("Timezone configurado: " . $timezone_string);
         }
 
         // Log de debug
-        $this->log("ðŸ• Data/Hora atual (WordPress): " . current_time('d/m/Y H:i:s'));
-        $this->log("ðŸ• Data/Hora atual (PHP): " . date('d/m/Y H:i:s'));
+        $this->log("Data/Hora atual (WordPress): " . current_time('d/m/Y H:i:s'));
+        $this->log("Data/Hora atual (PHP): " . date('d/m/Y H:i:s'));
     }
 
     private function load_timeout_settings()
@@ -210,7 +210,7 @@ trait UtilitiesTrait {
         $month = current_time('Y-m');
 
         // Log de debug
-        $this->log("ðŸ“Š Atualizando contagens - Data: {$today}, Mês: {$month}");
+        $this->log("Atualizando contagens - Data: {$today}, Mes: {$month}");
 
         // Diária
         $daily_submissions = get_option($this->daily_submissions_option, array());
@@ -221,7 +221,7 @@ trait UtilitiesTrait {
         }
         update_option($this->daily_submissions_option, $daily_submissions);
 
-        $this->log("ðŸ“Š Contagem diária atualizada: {$daily_submissions[$today]} submissões em {$today}");
+        $this->log("Contagem diaria atualizada: {$daily_submissions[$today]} submissoes em {$today}");
 
         // Mensal
         $monthly_submissions = get_option($this->monthly_submissions_option, array());
@@ -232,7 +232,7 @@ trait UtilitiesTrait {
         }
         update_option($this->monthly_submissions_option, $monthly_submissions);
 
-        $this->log("ðŸ"Š Contagem mensal atualizada: {$monthly_submissions[$month]} submissões em {$month}");
+        $this->log("Contagem mensal atualizada: {$monthly_submissions[$month]} submissoes em {$month}");
 
         // Verifica limite diário para auto-desativação Seu Souza
         $daily_limit = intval(get_option('hapvida_seu_souza_daily_limit', 30));
@@ -324,7 +324,7 @@ trait UtilitiesTrait {
         update_option($last_id_option, $next_id);
 
         // LOG DETALHADO
-        $this->log("ðŸ†” [CORREÇÃO] ID único gerado: {$lead_id} (último ID era: {$last_id})");
+        $this->log("[CORREÇÃO] ID único gerado: {$lead_id} (último ID era: {$last_id})");
         error_log("HAPVIDA DEBUG: ID único gerado - {$lead_id}");
 
         return $lead_id;

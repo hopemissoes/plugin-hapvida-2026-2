@@ -1236,7 +1236,7 @@ trait ShortcodeFormTrait {
                                 // NOVA FUNÇÃO DO MODAL DE SUCESSO MELHORADO
                                 // ====================================================================
                                 window.showSuccessModal = function (redirectUrl) {
-                                    console.log('ðŸŽ‰ Mostrando modal de sucesso melhorado');
+                                    console.log('Mostrando modal de sucesso melhorado');
 
                                     // Remove qualquer modal anterior
                                     $('.hapvida-modal-success').removeClass('show zoom-entrance');
@@ -1295,7 +1295,7 @@ trait ShortcodeFormTrait {
 
                                             // Tenta redirecionar para WhatsApp
                                             if (redirectUrl) {
-                                                console.log('ðŸ“± Tentando abrir WhatsApp:', redirectUrl);
+                                                console.log('Tentando abrir WhatsApp:', redirectUrl);
 
                                                 // Tenta abrir o popup
                                                 var newWindow = window.open(redirectUrl, '_blank');
@@ -1306,7 +1306,7 @@ trait ShortcodeFormTrait {
                                                         if (!newWindow || newWindow.closed || typeof newWindow.closed === 'undefined') {
                                                             // Popup foi bloqueado
                                                             popupBlocked = true;
-                                                            console.log('ðŸš« Popup bloqueado - mostrando link alternativo');
+                                                            console.log('Popup bloqueado - mostrando link alternativo');
 
                                                             // Mostra mensagem alternativa
                                                             $('#hapvida-redirect-text').html(
@@ -1365,7 +1365,7 @@ trait ShortcodeFormTrait {
 
                                 // Função para fechar o modal de sucesso
                                 window.closeSuccessModal = function () {
-                                    console.log('ðŸ”š Fechando modal de sucesso');
+                                    console.log('Fechando modal de sucesso');
 
                                     var $modal = $('#hapvida-success-modal');
 
@@ -1816,7 +1816,7 @@ trait ShortcodeFormTrait {
 
                                         if (filledAges < qtdPessoas) {
                                             showImprovedModal({
-                                                title: 'ðŸ‘¨â€ðŸ‘©â€ðŸ‘§â€ðŸ‘¦ Idades Incompletas',
+                                                title: 'Idades Incompletas',
                                                 message: `
                         <div style="text-align: center; padding: 20px;">
                             <div style="font-size: 48px; color: #ffc107; margin-bottom: 15px;">âš ï¸</div>
@@ -1827,7 +1827,7 @@ trait ShortcodeFormTrait {
                             </p>
                             <div style="background: #fff3cd; border: 2px solid #ffc107; border-radius: 12px; padding: 15px;">
                                 <p style="margin: 0; color: #856404; font-weight: bold;">
-                                    ðŸ“ Por favor, preencha a idade de todas as pessoas para uma cotação precisa!
+                                    Por favor, preencha a idade de todas as pessoas para uma cotação precisa!
                                 </p>
                             </div>
                         </div>
